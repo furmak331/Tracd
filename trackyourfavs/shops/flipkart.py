@@ -84,7 +84,10 @@ class Flipkart(Shop):
         avail = schema_availability(offer.get("availability"))
         price = to_float(offer.get("price"))
 
-        sizes = self._swatch_sizes(html, url) or self._link_sizes(html, url)
+        sizes = self._atlas_sizes(html, url) or self._swatch_sizes(html, url) or self._link_sizes(html, url)
+        if sizes and "UK/India Size" in html and all(re.fullmatch(r"\d{1,2}(?:\.\d)?", s.label) for s in sizes):
+            for s in sizes:
+                s.label = "UK " + s.label
         note = None
         sel = next((s for s in sizes if s.id == pid), None)
         if sel is None:
@@ -123,6 +126,23 @@ class Flipkart(Shop):
 
     # -- size list ---------------------------------------------------------
 
+    def _atlas_sizes(self, html: str, url: str) -> list[Size]:
+        """The size selector as Flipkart builds it today: each size tile carries
+        a tracking record with its pid, its label and a stock word
+        (`InStock:Variant`, `Scarcity:Variant` for "few left", `OutOfStock:Variant`)."""
+        state = assigned_json(html, "__INITIAL_STATE__")
+        if state is None:
+            return []
+        out: dict[str, Size] = {}
+        for t in _atlas_tiles(state):
+            pid, label = str(t["productId"]), str(t["contentTitle"]).strip()
+            if pid in out or not PID_RE.match(pid) or not is_size_label(label):
+                continue
+            word = str(t["contentType"]).split(":")[0].lower()
+            avail = True if word in ("instock", "scarcity") else False if word == "outofstock" else None
+            out[pid] = Size(pid, label, avail, url=self.size_url(url, pid))
+        return list(out.values()) if len(out) >= 2 else []
+
     def _swatch_sizes(self, html: str, url: str) -> list[Size]:
         state = assigned_json(html, "__INITIAL_STATE__")
         if state is None:
@@ -155,6 +175,25 @@ class Flipkart(Shop):
 
 def _abs(u: str) -> str:
     return u if u.startswith("http") else "https://www.flipkart.com" + (u if u.startswith("/") else "/" + u)
+
+
+def _atlas_tiles(obj: Any, depth: int = 0):
+    if depth > 60:
+        return
+    if isinstance(obj, dict):
+        if (
+            obj.get("moduleId") == "ATLAS_SWATCH_ATTRIBUTE"
+            and str(obj.get("contentType") or "").endswith(":Variant")
+            and obj.get("productId")
+            and obj.get("contentTitle")
+            and not obj.get("eventName")
+        ):
+            yield obj
+        for v in obj.values():
+            yield from _atlas_tiles(v, depth + 1)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from _atlas_tiles(v, depth + 1)
 
 
 def _find_swatches(obj: Any, depth: int = 0):

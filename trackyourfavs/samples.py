@@ -80,21 +80,42 @@ def _shell(title: str, body: str) -> str:
     )
 
 
-def flipkart_page(item: SampleItem, pid: str) -> str:
+def flipkart_page(item: SampleItem, pid: str, legacy_swatch: bool = False) -> str:
+    """A product page the way Flipkart builds it: JSON-LD for the pid in the
+    link, and a size selector whose tiles carry each size's pid and stock."""
     s = item.size(pid) or item.sizes[0]
-    labels = [x.label for x in item.sizes]
-    products = {x.id: {"attributeIndexes": [0, i], "url": f"{urlparse(item.url).path}?pid={x.id}"} for i, x in enumerate(item.sizes)}
-    products["OTHERCOLOURPID01"] = {"attributeIndexes": [1, 0], "url": "/x/p/itmother?pid=OTHERCOLOURPID01"}
-    state = {
-        "pageDataV4": {"page": {"data": {"10002": [{"widget": {"type": "SWATCH_VARIANTS", "data": {
-            "swatchComponent": {"value": {
-                "attributeOptions": [[{"value": item.colour}, {"value": "Black"}], [{"value": lab} for lab in labels]],
-                "attributes": [{"id": "color", "display": "Colour"}, {"id": "size", "display": "Size - UK/India"}],
-                "products": products,
-                "selectedSwatch": {"pid": s.id},
-            }}}}}]}}},
-        "recommendations": [{"title": "Similar products", "items": [{"value": "Puma Smash", "pid": "SHOXXXXXXXXXXXXX"}]}],
-    }
+    path = urlparse(item.url).path
+    if legacy_swatch:
+        labels = [x.label for x in item.sizes]
+        products = {x.id: {"attributeIndexes": [0, i], "url": f"{path}?pid={x.id}"} for i, x in enumerate(item.sizes)}
+        products["OTHERCOLOURPID01"] = {"attributeIndexes": [1, 0], "url": "/x/p/itmother?pid=OTHERCOLOURPID01"}
+        selector = {"10002": [{"widget": {"type": "SWATCH_VARIANTS", "data": {"swatchComponent": {"value": {
+            "attributeOptions": [[{"value": item.colour}, {"value": "Black"}], [{"value": lab} for lab in labels]],
+            "attributes": [{"id": "color", "display": "Colour"}, {"id": "size", "display": "Size - UK/India"}],
+            "products": products,
+            "selectedSwatch": {"pid": s.id},
+        }}}}}]}
+        state = {"pageDataV4": {"page": {"data": selector}}}
+    else:
+        def tracking(x: SampleSize) -> dict:
+            word = "OutOfStock" if not x.available else "Scarcity" if (x.qty or 9) < 3 else "InStock"
+            return {"moduleId": "ATLAS_SWATCH_ATTRIBUTE", "contentType": f"{word}:Variant", "productId": x.id,
+                    "contentTitle": x.label, "widgetTitle": "N", "widgetType": "atlas_swatch_attribute"}
+
+        tiles = [{"value": {
+            "trackerData_0": {"tracking": tracking(x)},
+            "label_0": {"value": {"text": x.label}},
+            # Every tile's tap action is tracked against the page's own pid.
+            "col_0": {"action": {"url": f"{path}?pid={x.id}&swatchAttr=size", "tracking": {
+                "moduleId": "ATLAS_SWATCH_ATTRIBUTE", "contentType": "InStock:Variant", "productId": s.id,
+                "contentTitle": "Custom Amount", "eventName": "PSOS", "selectedPid": x.id, "selectedOptionValue": x.label}}},
+        }} for x in item.sizes]
+        dls = {"size-selector-view_0": {"value": {
+            "selector-header_0": {"value": {"label_0": {"value": {"text": "Select Size"}}}},
+            "scrollToListData_0": {"value": tiles},
+        }}}
+        state = {"multiWidgetState": {"widgetsData": {"slots": [{"slotData": {"widget": {"data": {"dlsData": dls}}}}]}}}
+    state["recommendations"] = [{"title": "Similar products", "items": [{"value": "Puma Smash", "pid": "SHOXXXXXXXXXXXXX"}]}]
     ld = {
         "@context": "https://schema.org", "@type": "Product", "name": item.title, "sku": s.id,
         "image": item.image, "brand": {"@type": "Brand", "name": item.brand}, "color": item.colour,
@@ -103,7 +124,8 @@ def flipkart_page(item: SampleItem, pid: str) -> str:
     }
     body = (
         "<script>window.__INITIAL_STATE__ = " + json.dumps(state) + ";</script>"
-        + "".join(f'<a href="{urlparse(item.url).path}?pid={x.id}&amp;lid=LST"><div>{x.label}</div></a>' for x in item.sizes)
+        + "".join(f'<a href="{path}?pid={x.id}&amp;lid=LST"><div>{x.label}</div></a>' for x in item.sizes)
+        + '<table><tr><td><div>UK/India Size</div></td><td>' + s.label + '</td></tr></table>'
         + _ld({"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": []})
         + _ld([ld])
     )
@@ -114,13 +136,14 @@ def tatacliq_json(item: SampleItem, code: str) -> str:
     me = item.size(code) or item.sizes[0]
     return json.dumps({
         "type": "productDetailsWsDTO", "status": "Success", "productListingId": me.id,
-        "productTitle": item.title, "brandName": item.brand, "colorfamily": item.colour,
+        "productTitle": item.title, "brandName": item.brand, "productColor": item.colour,
         "winningSellerPrice": {"doubleValue": item.price, "formattedValue": f"₹{int(item.price)}"},
         "mrpPrice": {"doubleValue": item.mrp},
         "winningSellerAvailableStock": str(me.qty if me.available else 0),
         "galleryImagesList": [{"mediaType": "Image", "galleryImages": [{"key": "product", "value": item.image}]}],
+        # Tata CLiQ marks only the size in the link as "selected".
         "variantOptions": [
-            {"colorlink": {"color": item.colour, "selected": True},
+            {"colorlink": {"color": item.colour or "Birch & Driftwood", "selected": x.id == me.id},
              "sizelink": {"size": x.label, "productCode": x.id, "isAvailable": x.available,
                           "url": f"/x/p-{x.id.lower()}"}}
             for x in item.sizes

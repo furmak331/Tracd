@@ -57,8 +57,15 @@ class TataCliq(Shop):
             raise ShopError("Tata CLiQ could not find this product" + (f" ({j.get('error')})" if isinstance(j, dict) and j.get("error") else ""))
         variants = [v for v in (j.get("variantOptions") or []) if isinstance(v, dict) and isinstance(v.get("sizelink"), dict)]
         # Keep this colour only, when the reply says which colour is selected.
-        if any(isinstance(v.get("colorlink"), dict) and v["colorlink"].get("selected") is True for v in variants):
-            variants = [v for v in variants if v.get("colorlink", {}).get("selected") is True]
+        # Every size of every colour is listed; "selected" marks only the size in
+        # the link, so keep the sizes that share its colour name.
+        def colour(v):
+            c = v.get("colorlink")
+            return str(c.get("color") or "").strip().lower() if isinstance(c, dict) else ""
+
+        mine = next((colour(v) for v in variants if isinstance(v.get("colorlink"), dict) and v["colorlink"].get("selected") is True), "")
+        if mine:
+            variants = [v for v in variants if colour(v) == mine]
 
         listing = str(j.get("productListingId") or "").upper()
         seller_stock = to_int(j.get("winningSellerAvailableStock"))
@@ -109,7 +116,7 @@ class TataCliq(Shop):
             image=image,
             price=price,
             mrp=to_float(j.get("mrpPrice")),
-            colour=j.get("colorfamily") or j.get("colour"),
+            colour=j.get("productColor") or j.get("colorfamily") or j.get("colour"),
             sizes=sizes,
             selected_size_id=code if any(s.id == code for s in sizes) else None,
         )

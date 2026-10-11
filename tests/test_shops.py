@@ -113,6 +113,29 @@ async def test_flipkart_restock_is_seen(catalog, fetcher):
     assert r.state == Stock.IN_STOCK and r.price == 11999
 
 
+def test_flipkart_size_tiles_give_every_size_its_stock(catalog):
+    """Flipkart's size selector says which sizes are buyable; "few left" counts as in stock."""
+    from trackyourfavs.samples import flipkart_page
+
+    item = catalog[0]
+    item.size("SHOHGFW7FVKGBQP").qty = 1  # UK 6: "Scarcity"
+    url = item.url + "?pid=SHOHGFW7FVKGBQR"
+    p = Flipkart().parse(url, flipkart_page(item, "SHOHGFW7FVKGBQR"))
+    assert [(s.label, s.available) for s in p.sizes] == [
+        ("UK 6", True), ("UK 7", True), ("UK 8", True), ("UK 9", False), ("UK 10", True), ("UK 11", True)]
+    assert p.selected_size_id == "SHOHGFW7FVKGBQR"
+
+
+def test_flipkart_older_swatch_layout_still_reads(catalog):
+    from trackyourfavs.samples import flipkart_page
+
+    item = catalog[0]
+    url = item.url + "?pid=SHOHGFW7FVKGBQT"
+    p = Flipkart().parse(url, flipkart_page(item, "SHOHGFW7FVKGBQT", legacy_swatch=True))
+    assert [s.label for s in p.sizes] == ["UK 6", "UK 7", "UK 8", "UK 9", "UK 10", "UK 11"]
+    assert p.size("SHOHGFW7FVKGBQT").available is False
+
+
 def test_flipkart_different_variant_is_unknown_not_a_false_alert():
     html = '<script type="application/ld+json">{"@type":"Product","name":"X","sku":"OTHERPID00000001","offers":{"price":1,"availability":"InStock"}}</script>'
     shop = Flipkart()
@@ -160,6 +183,22 @@ async def test_tatacliq_reads_all_sizes_from_one_call(catalog, fetcher):
     assert len(fetcher.calls) == 1 and "productDetails/mp000000029497693" in fetcher.calls[0]
     # The stored label from the shop's own spelling still matches.
     assert TataCliq().reading(p, "MP000000029497693", "UK/IND-9").state == Stock.OUT
+
+
+def test_tatacliq_keeps_every_size_of_the_linked_colour():
+    """Only the size in the link is marked selected; its colour decides the list."""
+    def v(code, size, colour, sel, avail):
+        return {"colorlink": {"color": colour, "selected": sel},
+                "sizelink": {"size": size, "productCode": code, "isAvailable": avail}}
+
+    body = json.dumps({"productListingId": "MP0000003", "productTitle": "Shoe", "variantOptions": [
+        v("MP0000003", "UK/IND-3", "Birch & Driftwood", True, False),
+        v("MP0000009", "UK/IND-9", "Birch & Driftwood", False, False),
+        v("MP0000008", "UK/IND-8", "Birch & Driftwood", False, True),
+        v("MP0000099", "UK/IND-9", "Black", False, True),
+    ]})
+    p = TataCliq().parse("https://www.tatacliq.com/x/p-mp0000003", "MP0000003", body)
+    assert [(s.label, s.available) for s in p.sizes] == [("UK 3", False), ("UK 9", False), ("UK 8", True)]
 
 
 async def test_tatacliq_seller_stock_counts_for_the_listing():
