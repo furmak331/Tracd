@@ -1,4 +1,4 @@
-"""Command line: `tyf` starts the tracker; `tyf check <link>` reads one product."""
+"""Command line: `tracd` starts the tracker; `tracd check <link>` reads one product."""
 
 from __future__ import annotations
 
@@ -21,17 +21,31 @@ from pathlib import Path
 from . import __version__
 
 DEFAULT_PORT = 8723
-log = logging.getLogger("trackyourfavs")
+log = logging.getLogger("tracd")
 
 
 def data_dir(override: str | None = None) -> Path:
     if override:
         return Path(override).expanduser()
-    if os.environ.get("TYF_HOME"):
-        return Path(os.environ["TYF_HOME"]).expanduser()
+    if os.environ.get("TRACD_HOME"):
+        return Path(os.environ["TRACD_HOME"]).expanduser()
     if sys.platform == "win32" and os.environ.get("APPDATA"):
-        return Path(os.environ["APPDATA"]) / "TrackYourFavs"
-    return Path.home() / ".trackyourfavs"
+        home, old = Path(os.environ["APPDATA"]) / "Tracd", Path(os.environ["APPDATA"]) / "TrackYourFavs"
+    else:
+        home, old = Path.home() / ".tracd", Path.home() / ".trackyourfavs"
+    _adopt_old_home(old, home)
+    return home
+
+
+def _adopt_old_home(old: Path, home: Path) -> None:
+    """Tracd used to be called TrackYourFavs: keep the watches and settings."""
+    try:
+        if old.is_dir() and not home.exists():
+            old.rename(home)
+        if (home / "trackyourfavs.db").exists() and not (home / "tracd.db").exists():
+            (home / "trackyourfavs.db").rename(home / "tracd.db")
+    except OSError:
+        pass
 
 
 def setup_logging(home: Path, quiet: bool = False) -> None:
@@ -39,7 +53,7 @@ def setup_logging(home: Path, quiet: bool = False) -> None:
     fmt = logging.Formatter("%(asctime)s  %(message)s", "%H:%M:%S")
     log.setLevel(logging.INFO)
     log.handlers.clear()
-    fh = RotatingFileHandler(home / "trackyourfavs.log", maxBytes=2_000_000, backupCount=2, encoding="utf-8")
+    fh = RotatingFileHandler(home / "tracd.log", maxBytes=2_000_000, backupCount=2, encoding="utf-8")
     fh.setFormatter(logging.Formatter("%(asctime)s  %(levelname)s  %(message)s"))
     log.addHandler(fh)
     if not quiet and sys.stdout is not None:
@@ -90,7 +104,7 @@ def port_free(host: str, port: int) -> bool:
 
 
 # --------------------------------------------------------------------------
-# tyf run
+# tracd run
 # --------------------------------------------------------------------------
 
 
@@ -105,7 +119,7 @@ async def serve(opts: argparse.Namespace) -> int:
     from .store import Store
 
     home = data_dir(opts.home)
-    store = Store(home / ("demo.db" if opts.demo else "trackyourfavs.db"))
+    store = Store(home / ("demo.db" if opts.demo else "tracd.db"))
     if opts.demo:
         fetcher = DemoFetcher()
     else:
@@ -128,7 +142,7 @@ async def serve(opts: argparse.Namespace) -> int:
     url = f"http://127.0.0.1:{opts.port}/"
     s = store.settings()
     ws = store.watches(enabled_only=True)
-    log.info(f"TrackYourFavs {__version__} is running. Dashboard: {url}")
+    log.info(f"Tracd {__version__} is running. Dashboard: {url}")
     if opts.lan:
         log.info(f"On your phone (same Wi-Fi): http://{lan_ip()}:{opts.port}/?key={lan_key}")
     if s.get("ntfy_enabled"):
@@ -139,7 +153,7 @@ async def serve(opts: argparse.Namespace) -> int:
         webbrowser.open(url)
     if ws and notifier.channels() and not opts.demo:
         asyncio.create_task(notifier.send(Alert(
-            "TrackYourFavs is running", f"Watching {len(ws)} size{'s' if len(ws) != 1 else ''}. You'll hear from it the moment one is back.",
+            "Tracd is running", f"Watching {len(ws)} size{'s' if len(ws) != 1 else ''}. You'll hear from it the moment one is back.",
             url=None)))
     if not opts.demo:
         asyncio.create_task(_warm(fetcher))
@@ -166,7 +180,7 @@ def cmd_run(opts: argparse.Namespace) -> int:
     setup_logging(data_dir(opts.home), quiet=opts.quiet)
     if not port_free("127.0.0.1", opts.port):
         if already_running(opts.port):
-            print(f"TrackYourFavs is already running: http://127.0.0.1:{opts.port}/")
+            print(f"Tracd is already running: http://127.0.0.1:{opts.port}/")
             if not opts.no_open:
                 webbrowser.open(f"http://127.0.0.1:{opts.port}/")
             return 0
@@ -180,7 +194,7 @@ def cmd_run(opts: argparse.Namespace) -> int:
 
 
 # --------------------------------------------------------------------------
-# tyf check <link>
+# tracd check <link>
 # --------------------------------------------------------------------------
 
 
@@ -261,7 +275,7 @@ def cmd_check(opts: argparse.Namespace) -> int:
 
 
 # --------------------------------------------------------------------------
-# tyf test-alert
+# tracd test-alert
 # --------------------------------------------------------------------------
 
 
@@ -269,7 +283,7 @@ def cmd_test_alert(opts: argparse.Namespace) -> int:
     from .notify import Alert, Notifier
     from .store import Store
 
-    store = Store(data_dir(opts.home) / "trackyourfavs.db")
+    store = Store(data_dir(opts.home) / "tracd.db")
 
     async def go() -> int:
         n = Notifier(store.settings)
@@ -280,7 +294,7 @@ def cmd_test_alert(opts: argparse.Namespace) -> int:
             s = store.settings()
             if "ntfy" in n.channels():
                 print(f"ntfy topic: {s['ntfy_topic']}")
-            res = await n.send(Alert("TrackYourFavs test", "If you can read this on your phone, alerts work.", urgent=True))
+            res = await n.send(Alert("Tracd test", "If you can read this on your phone, alerts work.", urgent=True))
             for k, v in res.items():
                 print(f"{k}: {'sent' if v is None else 'FAILED: ' + v}")
             return 0 if any(v is None for v in res.values()) else 1
@@ -291,7 +305,7 @@ def cmd_test_alert(opts: argparse.Namespace) -> int:
 
 
 # --------------------------------------------------------------------------
-# tyf autostart on|off
+# tracd autostart on|off
 # --------------------------------------------------------------------------
 
 
@@ -301,25 +315,25 @@ def _startup_target() -> tuple[Path, str]:
         pyw = py.with_name("pythonw.exe")
         exe = pyw if pyw.exists() else py
         folder = Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
-        body = f'CreateObject("Wscript.Shell").Run """{exe}"" -m trackyourfavs --no-open --quiet", 0, False\r\n'
-        return folder / "TrackYourFavs.vbs", body
+        body = f'CreateObject("Wscript.Shell").Run """{exe}"" -m tracd --no-open --quiet", 0, False\r\n'
+        return folder / "Tracd.vbs", body
     if sys.platform == "darwin":
         plist = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-<key>Label</key><string>com.trackyourfavs</string>
-<key>ProgramArguments</key><array><string>{py}</string><string>-m</string><string>trackyourfavs</string><string>--no-open</string><string>--quiet</string></array>
+<key>Label</key><string>com.tracd</string>
+<key>ProgramArguments</key><array><string>{py}</string><string>-m</string><string>tracd</string><string>--no-open</string><string>--quiet</string></array>
 <key>RunAtLoad</key><true/>
 </dict></plist>
 """
-        return Path.home() / "Library" / "LaunchAgents" / "com.trackyourfavs.plist", plist
+        return Path.home() / "Library" / "LaunchAgents" / "com.tracd.plist", plist
     desktop = f"""[Desktop Entry]
 Type=Application
-Name=TrackYourFavs
-Exec={py} -m trackyourfavs --no-open --quiet
+Name=Tracd
+Exec={py} -m tracd --no-open --quiet
 X-GNOME-Autostart-enabled=true
 """
-    return Path.home() / ".config" / "autostart" / "trackyourfavs.desktop", desktop
+    return Path.home() / ".config" / "autostart" / "tracd.desktop", desktop
 
 
 def cmd_autostart(opts: argparse.Namespace) -> int:
@@ -327,11 +341,11 @@ def cmd_autostart(opts: argparse.Namespace) -> int:
     if opts.state == "on":
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(body, encoding="utf-8")
-        print(f"TrackYourFavs will start when you sign in ({path}).")
+        print(f"Tracd will start when you sign in ({path}).")
     else:
         if path.exists():
             path.unlink()
-        print("TrackYourFavs will no longer start by itself.")
+        print("Tracd will no longer start by itself.")
     return 0
 
 
@@ -340,14 +354,14 @@ def cmd_autostart(opts: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--home", help="where to keep data (default: %%APPDATA%%\\TrackYourFavs or ~/.trackyourfavs)")
+    common.add_argument("--home", help="where to keep data (default: %%APPDATA%%\\Tracd or ~/.tracd)")
     browser = argparse.ArgumentParser(add_help=False)
     browser.add_argument("--show-browser", action="store_true", help="keep the tracker's browser window visible")
     browser.add_argument("--headless", action="store_true", help="no browser window at all (shops block this more often)")
     browser.add_argument("--browser-path", default="", help="use this Chrome/Edge/Chromium executable")
 
-    ap = argparse.ArgumentParser(prog="tyf", description="TrackYourFavs: instant restock alerts for your size.", parents=[common, browser])
-    ap.add_argument("--version", action="version", version=f"TrackYourFavs {__version__}")
+    ap = argparse.ArgumentParser(prog="tracd", description="Tracd: instant restock alerts for your size.", parents=[common, browser])
+    ap.add_argument("--version", action="version", version=f"Tracd {__version__}")
     ap.add_argument("--port", type=int, default=DEFAULT_PORT)
     ap.add_argument("--lan", action="store_true", help="also open the dashboard to your phone on the same Wi-Fi (with a key)")
     ap.add_argument("--no-open", action="store_true", help="don't open the dashboard in your browser")
@@ -365,7 +379,7 @@ def build_parser() -> argparse.ArgumentParser:
     t = sub.add_parser("test-alert", parents=[common], help="send a test alert to your phone")
     t.set_defaults(func=cmd_test_alert)
 
-    a = sub.add_parser("autostart", help="start TrackYourFavs when you sign in")
+    a = sub.add_parser("autostart", help="start Tracd when you sign in")
     a.add_argument("state", choices=["on", "off"])
     a.set_defaults(func=cmd_autostart)
     return ap

@@ -3,9 +3,9 @@ import time
 
 from conftest import FakeNotifier, settle
 
-from trackyourfavs.engine import Engine
-from trackyourfavs.samples import SampleFetcher
-from trackyourfavs.store import Store
+from tracd.engine import Engine
+from tracd.samples import SampleFetcher
+from tracd.store import Store
 
 FK = "https://www.flipkart.com/asics-gel-nyc-sneakers-men/p/itm9ed5f92dc1b32"
 UK9 = "SHOHGFW7FVKGBQT"
@@ -124,7 +124,7 @@ async def test_server_errors_are_unknown(engine, store, fetcher):
 
 
 async def test_a_bug_in_a_reader_does_not_stop_the_tracker(engine, store, monkeypatch):
-    from trackyourfavs.shops import BY_KEY
+    from tracd.shops import BY_KEY
 
     def boom(*a, **k):
         raise KeyError("surprise")

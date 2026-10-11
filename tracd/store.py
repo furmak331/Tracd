@@ -204,7 +204,7 @@ class Store:
                 except ValueError:
                     pass
             if not s.get("ntfy_topic"):
-                s["ntfy_topic"] = "tyf-" + secrets.token_hex(8)
+                s["ntfy_topic"] = "tracd-" + secrets.token_hex(8)
                 self._exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ("ntfy_topic", json.dumps(s["ntfy_topic"])))
             self._settings_cache = s
         return dict(self._settings_cache)

@@ -1,6 +1,6 @@
 """Sample shop pages, built the way each shop builds its real ones.
 
-Used by the tests, and by `tyf --demo`, which runs the whole app against these
+Used by the tests, and by `tracd --demo`, which runs the whole app against these
 instead of the real shops (stock flips every so often, so you can see an alert
 end to end without waiting for a real restock).
 """

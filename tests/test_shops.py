@@ -2,16 +2,16 @@ import json
 
 import pytest
 
-from trackyourfavs.models import Blocked, Fetched, ShopError, Stock
-from trackyourfavs.samples import SampleFetcher, amazon_page, demo_catalog
-from trackyourfavs.shops import GENERIC, shop_for
-from trackyourfavs.shops.ajio import Ajio
-from trackyourfavs.shops.amazon import Amazon
-from trackyourfavs.shops.flipkart import Flipkart
-from trackyourfavs.shops.generic import Generic, parse_page, parse_shopify
-from trackyourfavs.shops.myntra import Myntra
-from trackyourfavs.shops.nykaa import Nykaa, NykaaFashion
-from trackyourfavs.shops.tatacliq import TataCliq
+from tracd.models import Blocked, Fetched, ShopError, Stock
+from tracd.samples import SampleFetcher, amazon_page, demo_catalog
+from tracd.shops import GENERIC, shop_for
+from tracd.shops.ajio import Ajio
+from tracd.shops.amazon import Amazon
+from tracd.shops.flipkart import Flipkart
+from tracd.shops.generic import Generic, parse_page, parse_shopify
+from tracd.shops.myntra import Myntra
+from tracd.shops.nykaa import Nykaa, NykaaFashion
+from tracd.shops.tatacliq import TataCliq
 
 
 class StaticFetcher:
@@ -115,7 +115,7 @@ async def test_flipkart_restock_is_seen(catalog, fetcher):
 
 def test_flipkart_size_tiles_give_every_size_its_stock(catalog):
     """Flipkart's size selector says which sizes are buyable; "few left" counts as in stock."""
-    from trackyourfavs.samples import flipkart_page
+    from tracd.samples import flipkart_page
 
     item = catalog[0]
     item.size("SHOHGFW7FVKGBQP").qty = 1  # UK 6: "Scarcity"
@@ -127,7 +127,7 @@ def test_flipkart_size_tiles_give_every_size_its_stock(catalog):
 
 
 def test_flipkart_older_swatch_layout_still_reads(catalog):
-    from trackyourfavs.samples import flipkart_page
+    from tracd.samples import flipkart_page
 
     item = catalog[0]
     url = item.url + "?pid=SHOHGFW7FVKGBQT"
@@ -231,7 +231,7 @@ async def test_nykaa_man(fetcher):
 
 
 def test_nykaa_size_id_now_means_another_size_is_unknown(catalog):
-    from trackyourfavs.samples import nykaa_page
+    from tracd.samples import nykaa_page
 
     p = Nykaa().parse("https://www.nykaaman.com/a/p/18954652", nykaa_page(catalog[2]))
     r = Nykaa().reading(p, "1895453", "UK 10")
@@ -239,7 +239,7 @@ def test_nykaa_size_id_now_means_another_size_is_unknown(catalog):
 
 
 async def test_nykaa_fashion_uses_the_products_own_object(catalog):
-    from trackyourfavs.samples import SampleItem, SampleSize
+    from tracd.samples import SampleItem, SampleSize
 
     item = SampleItem("nykaafashion", "https://www.nykaafashion.com/levis-501/p/7654321", "Levi's 501 Jeans", "Levi's", 2999, 3999,
                       [SampleSize("S1", "28", False), SampleSize("S2", "30", True, 2), SampleSize("S3", "32", False)], item_id="7654321")
@@ -275,7 +275,7 @@ async def test_ajio_api(fetcher):
 
 
 async def test_ajio_falls_back_to_the_page_when_the_api_moves(catalog):
-    from trackyourfavs.samples import ajio_json
+    from tracd.samples import ajio_json
 
     item = catalog[4]
     page = "<script>window.__PRELOADED_STATE__ = {\"product\": {\"productDetails\": " + ajio_json(item) + "}};</script>"
@@ -315,7 +315,7 @@ async def test_amazon(fetcher, catalog):
     ('', False, None),
 ])
 def test_amazon_availability_box(box, cart, want):
-    from trackyourfavs.shops.amazon import availability
+    from tracd.shops.amazon import availability
 
     html = f'<span id="productTitle">X</span><div id="availability" class="a-section">{box}</div>' + ('<input id="add-to-cart-button">' if cart else "")
     assert availability(html)[0] is want

@@ -1,4 +1,4 @@
-// TrackYourFavs dashboard. Plain ES modules, no build step.
+// Tracd dashboard. Plain ES modules, no build step.
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -123,7 +123,7 @@ async function api(method, path, body) {
   try {
     r = await fetch(path, opts);
   } catch {
-    throw new Error("TrackYourFavs is not running. Start it again on your computer.");
+    throw new Error("Tracd is not running. Start it again on your computer.");
   }
   let data = {};
   try { data = await r.json(); } catch { /* not JSON */ }
@@ -245,7 +245,7 @@ function onHit(id) {
   if (S.notifyPerm === "granted") {
     try {
       const n = new Notification(`${w.size_label} in stock on ${w.shop_name}`, {
-        body: w.title, icon: w.image || "/static/icon.svg", requireInteraction: true, tag: "tyf-" + id,
+        body: w.title, icon: w.image || "/static/icon.svg", requireInteraction: true, tag: "tracd-" + id,
       });
       n.onclick = () => { window.open(w.open_url, "_blank", "noopener"); n.close(); };
     } catch { /* ignore */ }
@@ -260,8 +260,8 @@ function onHit(id) {
   let on = false;
   let n = 0;
   titleTimer = setInterval(() => {
-    document.title = (on = !on) ? `● ${w.size_label} IN STOCK` : "TrackYourFavs";
-    if (++n > 30 || document.hasFocus()) { clearInterval(titleTimer); document.title = "TrackYourFavs"; }
+    document.title = (on = !on) ? `● ${w.size_label} IN STOCK` : "Tracd";
+    if (++n > 30 || document.hasFocus()) { clearInterval(titleTimer); document.title = "Tracd"; }
   }, 900);
 }
 
@@ -857,7 +857,7 @@ function showWelcome() {
   m.hidden = false;
   const done = (then) => { closeModal(); api("PUT", "/api/settings", { onboarded: true }).then((d) => { S.settings = d.settings; }).catch(() => {}); then?.(); };
   replace(m, h("div", { class: "modal-card", role: "dialog", "aria-modal": "true", "aria-labelledby": "welcome-title" },
-    h("h2", { id: "welcome-title" }, "Welcome to TrackYourFavs"),
+    h("h2", { id: "welcome-title" }, "Welcome to Tracd"),
     h("p", { class: "lead" }, "Never miss your size again. Three steps:"),
     h("div", { class: "three" },
       h("div", {}, h("span", { class: "ic" }, icon("link")), h("span", {}, h("b", {}, "Paste a product link"), "From Flipkart, Myntra, AJIO, Amazon, Tata CLiQ or Nykaa.")),

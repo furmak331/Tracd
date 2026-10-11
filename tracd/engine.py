@@ -31,7 +31,7 @@ from .shops import BY_KEY, GENERIC
 from .shops.base import host_of
 from .store import Store, Watch
 
-log = logging.getLogger("trackyourfavs")
+log = logging.getLogger("tracd")
 
 PER_HOST = 2  # at most this many requests in flight to one shop
 

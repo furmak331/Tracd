@@ -219,7 +219,7 @@ class Api:
         n = self.engine.notifier
         if not n.channels():
             return _err("Turn on ntfy or Telegram first.", 409)
-        res = await n.send(Alert("TrackYourFavs test", "If you can read this on your phone, restock alerts will reach you.",
+        res = await n.send(Alert("Tracd test", "If you can read this on your phone, restock alerts will reach you.",
                                  urgent=True))
         ok = any(v is None for v in res.values())
         if ok:
@@ -321,10 +321,10 @@ def guard(lan_key: str | None):
         local = host in LOCAL_HOSTS and request.remote in ("127.0.0.1", "::1", None)
         if not local:
             if not lan_key:
-                return web.Response(status=403, text="TrackYourFavs only answers on this computer. Start it with --lan to use it from your phone.")
-            given = request.query.get("key") or request.cookies.get("tyf_key") or request.headers.get("X-TYF-Key")
+                return web.Response(status=403, text="Tracd only answers on this computer. Start it with --lan to use it from your phone.")
+            given = request.query.get("key") or request.cookies.get("tracd_key") or request.headers.get("X-Tracd-Key")
             if not given or not secrets.compare_digest(given, lan_key):
-                return web.Response(status=401, text="Open the link with the key that TrackYourFavs printed when it started.")
+                return web.Response(status=401, text="Open the link with the key that Tracd printed when it started.")
         if request.method not in ("GET", "HEAD", "OPTIONS"):
             if "application/json" not in request.headers.get("Content-Type", ""):
                 return _err("Send JSON.", 415)
@@ -333,7 +333,7 @@ def guard(lan_key: str | None):
                 return _err("Cross-site request refused.", 403)
         resp = await handler(request)
         if not local and lan_key and request.query.get("key"):
-            resp.set_cookie("tyf_key", lan_key, httponly=True, samesite="Strict", max_age=3600 * 24 * 365)
+            resp.set_cookie("tracd_key", lan_key, httponly=True, samesite="Strict", max_age=3600 * 24 * 365)
         resp.headers.setdefault("X-Content-Type-Options", "nosniff")
         resp.headers.setdefault("Referrer-Policy", "no-referrer")
         return resp

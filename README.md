@@ -1,13 +1,13 @@
-<p align="center"><img src="trackyourfavs/web/icon.svg" width="72" alt=""></p>
+<p align="center"><img src="tracd/web/icon.svg" width="72" alt=""></p>
 
-<h1 align="center">TrackYourFavs</h1>
+<h1 align="center">Tracd</h1>
 
 <p align="center"><b>Get pinged the second your size is back.</b><br>
 Instant restock alerts for the exact size you want on Flipkart, Myntra, AJIO, Amazon.in, Tata CLiQ and Nykaa.</p>
 
-<p align="center"><img src="docs/dashboard-dark.png" alt="TrackYourFavs dashboard" width="900"></p>
+<p align="center"><img src="docs/dashboard-dark.png" alt="Tracd dashboard" width="900"></p>
 
-Paste a product link, tap your size, and TrackYourFavs checks the shop every few seconds. When your size comes back, your phone gets a loud alert with a button that opens that size's page, ready to buy.
+Paste a product link, tap your size, and Tracd checks the shop every few seconds. When your size comes back, your phone gets a loud alert with a button that opens that size's page, ready to buy.
 
 - **Seconds, not hours.** Checks every 10 to 30 seconds (you choose). Hosted trackers check every 2 minutes at best, and their free plans check hourly.
 - **Your size, not just the product.** It reads the shop's own stock data for each size, so "in stock" means *your* size is buyable.
@@ -40,12 +40,12 @@ Share links from the shop apps (`dl.flipkart.com/s/…`, `amzn.in/d/…`, `myntr
 2. Download this repository (green **Code** button, then **Download ZIP**) and unzip it.
 3. Double-click **`start.bat`**.
 
-The first run takes about a minute to set up. After that, the dashboard opens in your browser at <http://127.0.0.1:8723>. TrackYourFavs uses the Chrome or Edge already on your PC. A minimised browser window appears: that's the tracker's own window. Leave it open.
+The first run takes about a minute to set up. After that, the dashboard opens in your browser at <http://127.0.0.1:8723>. Tracd uses the Chrome or Edge already on your PC. A minimised browser window appears: that's the tracker's own window. Leave it open.
 
 To have it start whenever you sign in, run this once from the folder:
 
 ```bat
-.venv\Scripts\python -m trackyourfavs autostart on
+.venv\Scripts\python -m tracd autostart on
 ```
 
 ### macOS / Linux
@@ -81,7 +81,7 @@ Open **Phone alerts** in the dashboard. It walks you through these steps:
 - **Got it** stops the reminder alerts for that restock. You'll still be alerted the next time it comes back.
 - **History** in the ⋯ menu shows every time the size came and went.
 - If a shop shows a verification page, the card turns red with an **Open shop window** button. Clear the check there yourself, and checking resumes.
-- Keep the computer awake and online. TrackYourFavs stops Windows and macOS from sleeping while it runs, but a closed laptop lid still stops it.
+- Keep the computer awake and online. Tracd stops Windows and macOS from sleeping while it runs, but a closed laptop lid still stops it.
 - **On your phone:** start with `--lan` and open the link it prints (it includes a private key) while on the same Wi-Fi.
 
 <p align="center"><img src="docs/phone.png" alt="Dashboard on a phone" width="300"></p>
@@ -89,19 +89,19 @@ Open **Phone alerts** in the dashboard. It walks you through these steps:
 ## Command line
 
 ```text
-tyf                         start the tracker and open the dashboard
-tyf --demo                  try it with simulated shops
-tyf --lan                   also serve the dashboard to your phone on the same Wi-Fi
-tyf --show-browser          keep the tracker's browser window visible
-tyf check <link>            read one product link and list its sizes and stock
-tyf check <link> --size "UK 9" --save dump/   ...and keep the raw responses (for bug reports)
-tyf test-alert              send a test alert
-tyf autostart on|off        start with your computer
+tracd                       start the tracker and open the dashboard
+tracd --demo                try it with simulated shops
+tracd --lan                 also serve the dashboard to your phone on the same Wi-Fi
+tracd --show-browser        keep the tracker's browser window visible
+tracd check <link>          read one product link and list its sizes and stock
+tracd check <link> --size "UK 9" --save dump/ ...and keep the raw responses (for bug reports)
+tracd test-alert            send a test alert
+tracd autostart on|off      start with your computer
 ```
 
-(Inside the folder, `tyf` is `.venv\Scripts\python -m trackyourfavs` on Windows and `.venv/bin/python -m trackyourfavs` elsewhere.)
+(Inside the folder, `tracd` is `.venv\Scripts\python -m tracd` on Windows and `.venv/bin/python -m tracd` elsewhere.)
 
-Data lives in `%APPDATA%\TrackYourFavs` on Windows and `~/.trackyourfavs` elsewhere. Set `TYF_HOME` to change it. The log is `trackyourfavs.log` in that folder.
+Data lives in `%APPDATA%\Tracd` on Windows and `~/.tracd` elsewhere. Set `TRACD_HOME` to change it. The log is `tracd.log` in that folder.
 
 ## How it works
 
@@ -126,7 +126,7 @@ pytest
 
 The tests cover every shop reader against pages built the way each shop builds them, the checker's alert logic, the alert channels, the API and its safety checks. They also run the real browser path and the dashboard in Chromium, with the shops stood in for by request interception, so they run offline.
 
-Shops change their pages. If one stops reading, `tyf check <link> --save dump/` saves exactly what the shop sent, which is all that's needed to fix its reader.
+Shops change their pages. If one stops reading, `tracd check <link> --save dump/` saves exactly what the shop sent, which is all that's needed to fix its reader.
 
 ## License
 

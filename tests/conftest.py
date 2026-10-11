@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from trackyourfavs.engine import Engine
-from trackyourfavs.notify import Alert
-from trackyourfavs.samples import SampleFetcher, demo_catalog
-from trackyourfavs.store import Store
+from tracd.engine import Engine
+from tracd.notify import Alert
+from tracd.samples import SampleFetcher, demo_catalog
+from tracd.store import Store
 
 def _find_chromium() -> str | None:
-    """A Chromium to drive in tests: TYF_TEST_CHROME, Playwright's own, or a known install."""
-    candidates = [os.environ.get("TYF_TEST_CHROME")]
+    """A Chromium to drive in tests: TRACD_TEST_CHROME, Playwright's own, or a known install."""
+    candidates = [os.environ.get("TRACD_TEST_CHROME")]
     try:
         from playwright.sync_api import sync_playwright
 

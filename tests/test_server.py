@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from trackyourfavs.server import create_app
+from tracd.server import create_app
 
 FK = "https://www.flipkart.com/asics-gel-nyc-sneakers-men/p/itm9ed5f92dc1b32"
 J = {"Content-Type": "application/json"}
@@ -25,13 +25,13 @@ async def test_state(client):
     d = await r.json()
     assert r.status == 200
     assert {s["key"] for s in d["shops"]} >= {"flipkart", "myntra", "ajio", "amazon", "tatacliq", "nykaa", "nykaafashion"}
-    assert d["settings"]["ntfy_topic"].startswith("tyf-")
+    assert d["settings"]["ntfy_topic"].startswith("tracd-")
     assert d["watches"] == []
 
 
 async def test_dashboard_page_and_assets(client):
     r = await client.get("/")
-    assert r.status == 200 and "TrackYourFavs" in await r.text()
+    assert r.status == 200 and "Tracd" in await r.text()
     for f in ("app.js", "styles.css", "icon.svg"):
         assert (await client.get("/static/" + f)).status == 200
 
@@ -131,7 +131,7 @@ async def test_settings_validation_and_secrets(client, store):
 async def test_test_alert(client, notifier, store):
     st, d = await post(client, "/api/settings/test")
     assert st == 200 and d["ok"] and store.settings()["alerts_verified"] is True
-    assert notifier.sent[-1].title == "TrackYourFavs test"
+    assert notifier.sent[-1].title == "Tracd test"
     notifier.on = False
     st, d = await post(client, "/api/settings/test")
     assert st == 409
@@ -158,8 +158,8 @@ async def test_lan_mode_needs_the_key(aiohttp_client, store, engine, fetcher):
     r = await client.get("/api/state", headers={"Host": "192.168.1.5:8723"})
     assert r.status == 401
     r = await client.get("/?key=sekret", headers={"Host": "192.168.1.5:8723"})
-    assert r.status == 200 and "tyf_key" in r.cookies
-    r = await client.get("/api/state", headers={"Host": "192.168.1.5:8723", "X-TYF-Key": "sekret"})
+    assert r.status == 200 and "tracd_key" in r.cookies
+    r = await client.get("/api/state", headers={"Host": "192.168.1.5:8723", "X-Tracd-Key": "sekret"})
     assert r.status == 200
 
 

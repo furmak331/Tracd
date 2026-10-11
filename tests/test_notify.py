@@ -1,7 +1,7 @@
 import pytest
 from aiohttp import web
 
-from trackyourfavs.notify import Alert, Notifier
+from tracd.notify import Alert, Notifier
 
 
 @pytest.fixture
@@ -41,13 +41,13 @@ def make(settings, svc):
 
 
 async def test_ntfy_urgent_alert_payload(fake_services):
-    s = {"ntfy_enabled": True, "ntfy_server": fake_services["url"], "ntfy_topic": "tyf-abc", "ntfy_token": "tk_1"}
+    s = {"ntfy_enabled": True, "ntfy_server": fake_services["url"], "ntfy_topic": "tracd-abc", "ntfy_token": "tk_1"}
     n = make(s, fake_services)
     res = await n.send(Alert("UK 9 in stock on Flipkart", "Buy now", url="https://fk/p", image="https://img", urgent=True, button="Open on Flipkart"))
     await n.close()
     assert res == {"ntfy": None}
     headers, body = fake_services["ntfy"][0]
-    assert body["topic"] == "tyf-abc" and body["priority"] == 5
+    assert body["topic"] == "tracd-abc" and body["priority"] == 5
     assert body["click"] == "https://fk/p" and body["icon"] == "https://img"
     assert body["actions"][0]["label"] == "Open on Flipkart"
     assert headers["Authorization"] == "Bearer tk_1"

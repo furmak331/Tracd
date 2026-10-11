@@ -6,10 +6,10 @@ import pytest
 from aiohttp.test_utils import TestServer
 from conftest import FakeNotifier, chromium_path
 
-from trackyourfavs.engine import Engine
-from trackyourfavs.samples import SampleFetcher, demo_catalog
-from trackyourfavs.server import create_app
-from trackyourfavs.store import Store
+from tracd.engine import Engine
+from tracd.samples import SampleFetcher, demo_catalog
+from tracd.server import create_app
+from tracd.store import Store
 
 pytestmark = pytest.mark.skipif(chromium_path() is None, reason="no Chromium available")
 

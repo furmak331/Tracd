@@ -1,6 +1,6 @@
 import json
 
-from trackyourfavs.extract import (
+from tracd.extract import (
     assigned_json,
     find_sizes,
     first_url,
