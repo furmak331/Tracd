@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trackyourfavs"
+version = "1.0.0"
+description = "Instant restock alerts for the exact size you want, on Flipkart, Myntra, AJIO, Amazon.in, Tata CLiQ and Nykaa."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "playwright>=1.40",
+    "aiohttp>=3.9",
+    "segno>=1.5",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "pytest-aiohttp>=1.0", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+tyf = "trackyourfavs.cli:main"
+trackyourfavs = "trackyourfavs.cli:main"
+
+[tool.setuptools]
+packages = ["trackyourfavs", "trackyourfavs.shops"]
+
+[tool.setuptools.package-data]
+trackyourfavs = ["web/*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]
