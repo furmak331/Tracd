@@ -9,6 +9,8 @@ Paste any product link, pick your size, and Tracd alerts your phone the moment i
 while it's still there to buy.
 </p>
 
+<p align="center"><b>Public beta:</b> tested on real pages for Flipkart and Tata CLiQ. Help test the rest and <a href="https://github.com/furmak331/Tracd/issues/new?template=shop-not-reading.yml">report a shop</a> that doesn't read.</p>
+
 <p align="center">
 <a href="https://github.com/furmak331/Tracd/actions/workflows/tests.yml"><img src="https://github.com/furmak331/Tracd/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
 <img src="https://img.shields.io/badge/python-3.10%2B-3776ab" alt="Python 3.10+">
@@ -16,7 +18,7 @@ while it's still there to buy.
 <img src="https://img.shields.io/badge/license-MIT-22c55e" alt="MIT license">
 </p>
 
-<p align="center"><img src="docs/dashboard-dark.png" alt="The Tracd dashboard watching six sizes across six shops" width="900"></p>
+<p align="center"><img src="docs/demo.gif" alt="Adding a product, picking a size, and getting a restock alert in Tracd" width="880"></p>
 
 The shoes you wanted sold out in your size. They'll be back, maybe at 2 a.m., maybe for ten minutes. Tracd keeps watch for you: it checks the shop every few seconds and sends a loud alert to your phone the moment your size returns, with a button that opens the page ready to buy.
 
@@ -85,17 +87,21 @@ Open **Phone alerts** in the dashboard and follow along. It takes two minutes.
 
 ## Supported shops
 
-| Shop | Every size listed | Where the stock comes from |
-|---|---|---|
-| Flipkart | ✓ | Each size's own page, plus the size picker for the full list |
-| Myntra | ✓ | The page's product data, including units left |
-| AJIO | ✓ | AJIO's own product API, with the page as a fallback |
-| Amazon.in | ✓ | Each size's own page: availability and Add to Cart |
-| Tata CLiQ | ✓ | Tata CLiQ's own product API, which lists every size |
-| Nykaa Man / Nykaa | ✓ | The page's product data, including units left |
-| Nykaa Fashion | ✓ | The page's product data |
-| Shopify stores (many Indian D2C brands) | ✓ | The store's variant feed |
-| Any other shop | Best effort | The page's structured product data |
+| Shop | Status | Every size listed | Where the stock comes from |
+|---|---|---|---|
+| Flipkart | ✅ Tested on real pages | ✓ | Each size's own page, plus the size picker for the full list |
+| Tata CLiQ | ✅ Tested on real pages | ✓ | Tata CLiQ's own product API, which lists every size |
+| Myntra | 🧪 Beta, please report | ✓ | The page's product data, including units left |
+| AJIO | 🧪 Beta, please report | ✓ | AJIO's own product API, with the page as a fallback |
+| Amazon.in | 🧪 Beta, please report | ✓ | Each size's own page: availability and Add to Cart |
+| Nykaa Man / Nykaa | 🧪 Beta, please report | ✓ | The page's product data, including units left |
+| Nykaa Fashion | 🧪 Beta, please report | ✓ | The page's product data |
+| Shopify stores (many Indian D2C brands) | 🧪 Beta, please report | ✓ | The store's variant feed |
+| Any other shop | Best effort | Sometimes | The page's structured product data |
+
+If a shop doesn't read, `tracd check <link> --save dump/` saves exactly what it sent. [Open a "Shop not reading" issue](https://github.com/furmak331/Tracd/issues/new?template=shop-not-reading.yml) with it and it can be fixed. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+<p align="center"><img src="docs/dashboard-dark.png" alt="The Tracd dashboard watching six sizes across six shops" width="900"></p>
 
 ## Tips
 

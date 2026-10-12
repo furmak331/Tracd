@@ -1,0 +1,24 @@
+name: Something else is broken
+description: Install problems, alerts not arriving, dashboard bugs
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to see it
+  - type: textarea
+    id: log
+    attributes:
+      label: Last lines of tracd.log
+      description: In %APPDATA%\Tracd on Windows or ~/.tracd elsewhere.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Tracd version, OS and Python version

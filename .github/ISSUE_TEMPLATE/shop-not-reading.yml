@@ -1,0 +1,33 @@
+name: Shop not reading
+description: A product link shows "can't read", wrong sizes or wrong stock
+labels: ["shop"]
+body:
+  - type: input
+    id: link
+    attributes:
+      label: Product link
+      placeholder: https://www.myntra.com/...
+    validations:
+      required: true
+  - type: input
+    id: size
+    attributes:
+      label: Size you're watching
+      placeholder: UK 9
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what the shop page shows
+    validations:
+      required: true
+  - type: textarea
+    id: check
+    attributes:
+      label: Output of `tracd check <link> --size "<size>" --save dump/`
+      description: Paste the output here and attach the dump folder as a zip. It's what the shop sent, and it's what we need to fix the reader.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Tracd version and OS
+      placeholder: 1.0.0, Windows 11
