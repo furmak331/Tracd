@@ -58,14 +58,15 @@ async def test_add_watch_restock_and_remove(app):
     await page.click("#watch-btn")
     card = page.locator("[data-watch]")
     await card.wait_for()
-    await page.wait_for_selector("text=Sold out", timeout=5000)
+    # Look inside the card: the screen-reader announcement says "sold out" too.
+    await card.get_by_text("Sold out", exact=True).wait_for(timeout=5000)
     assert "every 30s" in await card.inner_text()
     assert store.watches()[0].interval == 30
 
     # Restock: "Check now" shows it at once.
     catalog[0].size("SHOHGFW7FVKGBQT").available = True
     await page.get_by_role("button", name="Check now").click()
-    await page.wait_for_selector("text=In stock now", timeout=5000)
+    await card.get_by_text("In stock now", exact=True).wait_for(timeout=5000)
     buy = page.get_by_role("link", name="Buy on Flipkart")
     assert await buy.get_attribute("href") == FK
     await page.get_by_role("button", name="Got it").click()
