@@ -1,3 +1,3 @@
-"""Tracd: instant restock alerts for the size you want."""
+"""Tracd: never miss a restock again."""
 
 __version__ = "1.0.0"

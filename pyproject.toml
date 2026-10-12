@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tracd"
 version = "1.0.0"
-description = "Instant restock alerts for the exact size you want, on Flipkart, Myntra, AJIO, Amazon.in, Tata CLiQ and Nykaa."
+description = "Never miss a restock again: instant phone alerts the moment your size is back in stock."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

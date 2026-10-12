@@ -1,54 +1,67 @@
-<p align="center"><img src="tracd/web/icon.svg" width="72" alt=""></p>
+<p align="center"><img src="tracd/web/icon.svg" width="84" alt=""></p>
 
 <h1 align="center">Tracd</h1>
 
-<p align="center"><b>Get pinged the second your size is back.</b><br>
-Instant restock alerts for the exact size you want on Flipkart, Myntra, AJIO, Amazon.in, Tata CLiQ and Nykaa.</p>
+<h3 align="center">Never miss a restock again.</h3>
 
-<p align="center"><img src="docs/dashboard-dark.png" alt="Tracd dashboard" width="900"></p>
+<p align="center">
+Paste any product link, pick your size, and Tracd alerts your phone the moment it's back in stock,<br>
+while it's still there to buy.
+</p>
 
-Paste a product link, tap your size, and Tracd checks the shop every few seconds. When your size comes back, your phone gets a loud alert with a button that opens that size's page, ready to buy.
+<p align="center">
+<a href="https://github.com/furmak331/Tracd/actions/workflows/tests.yml"><img src="https://github.com/furmak331/Tracd/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+<img src="https://img.shields.io/badge/python-3.10%2B-3776ab" alt="Python 3.10+">
+<img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-555" alt="Windows, macOS, Linux">
+<img src="https://img.shields.io/badge/license-MIT-22c55e" alt="MIT license">
+</p>
 
-- **Seconds, not hours.** Checks every 10 to 30 seconds (you choose). Hosted trackers check every 2 minutes at best, and their free plans check hourly.
-- **Your size, not just the product.** It reads the shop's own stock data for each size, so "in stock" means *your* size is buyable.
-- **No false alarms.** If a shop's answer can't be read, it says so and never guesses "in stock". If a shop stays unreadable, you're told, so a quiet tracker never hides a broken one.
-- **Alerts you'll notice.** An urgent push from ntfy and/or Telegram, repeated until you tap "Got it". The page also opens on your computer and it beeps.
-- **Every shop at once.** All shops are checked in parallel, so a slow shop never delays the others. Two sizes of the same item cost one request.
-- **Private and polite.** Everything runs on your own computer. It never logs in, never adds to cart, never buys, and never tries to get around a shop's verification page.
+<p align="center"><img src="docs/dashboard-dark.png" alt="The Tracd dashboard watching six sizes across six shops" width="900"></p>
 
-## Shops
+The shoes you wanted sold out in your size. They'll be back, maybe at 2 a.m., maybe for ten minutes. Tracd keeps watch for you: it checks the shop every few seconds and sends a loud alert to your phone the moment your size returns, with a button that opens the page ready to buy.
 
-| Shop | Size list | How stock is read |
+## Why Tracd
+
+- **⚡ Seconds, not hours.** Checks every 10 to 30 seconds, your choice. Most online trackers check hourly or slower on their free plans, which is too slow for a popular size.
+- **🎯 Your size, not just the product.** A product page says "in stock" if any size is left. Tracd reads the stock of the exact size you picked, so an alert means *you* can buy it.
+- **📱 Alerts you can't miss.** An urgent push to your phone through the free ntfy app or Telegram, repeated until you tap **Got it**. Your computer chimes and opens the page too.
+- **🛍️ Every big Indian fashion shop.** Flipkart, Myntra, AJIO, Amazon.in, Tata CLiQ, Nykaa Fashion, Nykaa Man, and Shopify stores, all watched at once. A slow shop never holds up the others.
+- **🙅 No false alarms.** If a shop's answer can't be read, Tracd says so instead of guessing. If a shop stays unreadable for a while, it tells you, so a quiet Tracd never means a broken one.
+- **🔒 Free, private, yours.** No account and no subscription. It runs on your own computer, never logs in to a shop, never adds to cart, never buys anything for you.
+
+| | Tracd | Typical online restock tracker |
 |---|---|---|
-| Flipkart | ✓ | The size's own page (each size has its own `pid`), from its product data |
-| Myntra | ✓ | Every size from the page's product data, including units left |
-| AJIO | ✓ | AJIO's own product API, with a fallback to the page |
-| Amazon.in | ✓ | The size's own page (each size is its own ASIN): availability and Add to Cart |
-| Tata CLiQ | ✓ | Tata CLiQ's own product API, which lists every size |
-| Nykaa Man / Nykaa | ✓ | Every size from the page's product data, including units left |
-| Nykaa Fashion | ✓ | The page's product data |
-| Shopify stores (many Indian D2C brands) | ✓ | The store's variant feed |
-| Any other shop | Best effort | The page's structured product data |
+| How often it checks | Every 10–30 seconds | Hourly or slower on free plans |
+| Watches your exact size | ✓ | Often only the whole product |
+| Urgent phone alert that repeats until you tap | ✓ | Rarely |
+| Account needed | No | Usually |
+| Cost | Free | Paid plans for faster checks |
 
-Share links from the shop apps (`dl.flipkart.com/s/…`, `amzn.in/d/…`, `myntr.it/…`) work too. You can paste the whole share message.
+## How it works
 
-## Start it
+1. **Paste a link.** Copy it from the shop's website or app. Share links and whole share messages work too.
+2. **Pick your sizes.** Tracd lists every size with its current stock. Choose one or several, and how often to check.
+3. **Get pinged.** When a size comes back, your phone buzzes with the price, how many are left, and a button that opens the page.
 
-### Windows
+<p align="center"><img src="docs/add.png" alt="Picking sizes to watch" width="760"></p>
+
+## Get started in a minute
+
+**Windows**
 
 1. Install [Python 3.10 or newer](https://www.python.org/downloads/) and tick **Add python.exe to PATH**.
-2. Download this repository (green **Code** button, then **Download ZIP**) and unzip it.
+2. Download Tracd (green **Code** button, then **Download ZIP**) and unzip it.
 3. Double-click **`start.bat`**.
 
-The first run takes about a minute to set up. After that, the dashboard opens in your browser at <http://127.0.0.1:8723>. Tracd uses the Chrome or Edge already on your PC. A minimised browser window appears: that's the tracker's own window. Leave it open.
+The dashboard opens at <http://127.0.0.1:8723>. The first run takes about a minute to set up. Tracd uses the Chrome or Edge already on your PC, and a minimised browser window appears: that's Tracd's own window, so leave it open.
 
-To have it start whenever you sign in, run this once from the folder:
+To start Tracd every time you sign in, run this once from the folder:
 
 ```bat
 .venv\Scripts\python -m tracd autostart on
 ```
 
-### macOS / Linux
+**macOS / Linux**
 
 ```sh
 ./start.sh
@@ -56,35 +69,55 @@ To have it start whenever you sign in, run this once from the folder:
 
 If you have neither Chrome nor Edge, also run `.venv/bin/python -m playwright install chromium` once.
 
-### Try it without real shops
+**Just looking?** `start.bat --demo` (or `./start.sh --demo`) runs Tracd against pretend shops where a sold-out size restocks every minute or so. It's the quickest way to see an alert land on your phone.
 
-`start.bat --demo` (or `./start.sh --demo`) runs the whole app against simulated shops, where a sold-out size restocks every minute or so. It's a quick way to see an alert reach your phone.
+## Set up phone alerts
 
-## Phone alerts
-
-Open **Phone alerts** in the dashboard. It walks you through these steps:
+Open **Phone alerts** in the dashboard and follow along. It takes two minutes.
 
 **ntfy (recommended, free, no account)**
 1. Install ntfy for [Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy) or [iPhone](https://apps.apple.com/app/ntfy/id1625396347).
-2. Tap **+** and subscribe to the topic the dashboard shows, or scan its QR code. The topic is random and private to you.
-3. On Android, turn on **Instant delivery** for the topic so alerts land within a second.
+2. Scan the QR code in the dashboard, or tap **+** and type the topic it shows. The topic is random and private to you.
+3. On Android, turn on **Instant delivery** for the topic so alerts arrive within a second.
 4. Tap **Send a test alert**.
 
-**Telegram (optional)**: create a bot with @BotFather, paste its token, send the bot any message, and tap **Find my chat**.
+**Telegram (optional):** create a bot with @BotFather, paste its token, send the bot any message, then tap **Find my chat**.
 
-## Using it
+## Supported shops
 
-<p align="center"><img src="docs/add.png" alt="Picking sizes" width="760"></p>
+| Shop | Every size listed | Where the stock comes from |
+|---|---|---|
+| Flipkart | ✓ | Each size's own page, plus the size picker for the full list |
+| Myntra | ✓ | The page's product data, including units left |
+| AJIO | ✓ | AJIO's own product API, with the page as a fallback |
+| Amazon.in | ✓ | Each size's own page: availability and Add to Cart |
+| Tata CLiQ | ✓ | Tata CLiQ's own product API, which lists every size |
+| Nykaa Man / Nykaa | ✓ | The page's product data, including units left |
+| Nykaa Fashion | ✓ | The page's product data |
+| Shopify stores (many Indian D2C brands) | ✓ | The store's variant feed |
+| Any other shop | Best effort | The page's structured product data |
 
-- **Pick several sizes at once.** For example, UK 9 and UK 9.5.
-- **Check now** asks the shop right away. **Pause** stops checking a size without forgetting it.
-- **Got it** stops the reminder alerts for that restock. You'll still be alerted the next time it comes back.
-- **History** in the ⋯ menu shows every time the size came and went.
-- If a shop shows a verification page, the card turns red with an **Open shop window** button. Clear the check there yourself, and checking resumes.
-- Keep the computer awake and online. Tracd stops Windows and macOS from sleeping while it runs, but a closed laptop lid still stops it.
-- **On your phone:** start with `--lan` and open the link it prints (it includes a private key) while on the same Wi-Fi.
+## Tips
 
-<p align="center"><img src="docs/phone.png" alt="Dashboard on a phone" width="300"></p>
+- **Watch several sizes at once,** for example UK 9 and UK 9.5.
+- **Got it** stops the reminders for this restock. You'll still be alerted the next time it comes back.
+- **Check now** asks the shop right away. **Pause** stops checking without forgetting the size.
+- **History** in the ⋯ menu shows every time a size came and went.
+- **If a shop asks you to verify you're human,** the card turns red with an **Open shop window** button. Clear the check there yourself and Tracd carries on.
+- **Keep the computer on and online.** Tracd stops Windows and macOS from sleeping while it runs, but closing a laptop lid still pauses it.
+- **See the dashboard on your phone:** start with `--lan` and open the link it prints while on the same Wi-Fi.
+
+<p align="center"><img src="docs/phone.png" alt="The Tracd dashboard on a phone" width="300"></p>
+
+## FAQ
+
+**Does my computer need to stay on?** Yes. Tracd runs on your computer, not on a server, which is what makes it fast, free and private. Shops also block checks from cloud servers but answer a normal browser at home.
+
+**Will Tracd buy the item for me?** No. It never logs in, adds to cart or buys anything. It tells you the moment your size is back and opens the page, and you buy it yourself.
+
+**Will the shop block me?** Tracd checks the way a person browsing would, from a real browser with only a couple of requests to a shop at a time, and it backs off when a shop is slow or shows a verification page. A check every 10 to 30 seconds per item is gentle.
+
+**Is it free?** Yes, and open source under the MIT license. ntfy and Telegram are free too.
 
 ## Command line
 
@@ -103,7 +136,7 @@ tracd autostart on|off      start with your computer
 
 Data lives in `%APPDATA%\Tracd` on Windows and `~/.tracd` elsewhere. Set `TRACD_HOME` to change it. The log is `tracd.log` in that folder.
 
-## How it works
+## Under the hood
 
 ```
  dashboard (your browser) ──HTTP/SSE──▶ local server ──▶ checker ──▶ shop readers ──▶ one real browser tab per shop

@@ -360,7 +360,7 @@ def build_parser() -> argparse.ArgumentParser:
     browser.add_argument("--headless", action="store_true", help="no browser window at all (shops block this more often)")
     browser.add_argument("--browser-path", default="", help="use this Chrome/Edge/Chromium executable")
 
-    ap = argparse.ArgumentParser(prog="tracd", description="Tracd: instant restock alerts for your size.", parents=[common, browser])
+    ap = argparse.ArgumentParser(prog="tracd", description="Tracd: never miss a restock again.", parents=[common, browser])
     ap.add_argument("--version", action="version", version=f"Tracd {__version__}")
     ap.add_argument("--port", type=int, default=DEFAULT_PORT)
     ap.add_argument("--lan", action="store_true", help="also open the dashboard to your phone on the same Wi-Fi (with a key)")
