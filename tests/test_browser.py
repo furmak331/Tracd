@@ -26,7 +26,7 @@ async def shopnet(tmp_path):
     samples = SampleFetcher(catalog)
     fetcher = BrowserFetcher(tmp_path / "profile", headless=True, browser_path=chromium_path(), timeout=3, log=lambda m: None)
     await fetcher.start()
-    state = {"status": None, "hang": False, "hits": []}
+    state = {"status": None, "hang": False, "offline": False, "hits": []}
 
     async def handle(route):
         url = route.request.url
@@ -35,6 +35,8 @@ async def shopnet(tmp_path):
             # Share links bounce through a tiny page, like the real ones.
             return await route.fulfill(status=200, content_type="text/html",
                                        body=f"<script>location.replace('{FK}?pid=SHOHGFW7FVKGBQR')</script>")
+        if state["offline"]:
+            return await route.abort("internetdisconnected")
         if state["hang"] and route.request.resource_type == "fetch":
             await asyncio.sleep(10)
             return await route.abort()
@@ -47,6 +49,15 @@ async def shopnet(tmp_path):
         await route.fulfill(status=200, body=body, content_type=ctype)
 
     await fetcher._ctx.route("**/*", handle)
+    real_start = fetcher.start
+
+    async def start_and_route():  # a restarted browser stands in for the shops too
+        fresh = fetcher._ctx is None
+        await real_start()
+        if fresh:
+            await fetcher._ctx.route("**/*", handle)
+
+    fetcher.start = start_and_route
     yield fetcher, catalog, state
     await fetcher.close()
 
@@ -94,6 +105,47 @@ async def test_tab_closed_by_hand_is_reopened(shopnet):
     await page.close()
     f = await fetcher.fetch(FK + "?pid=SHOHGFW7FVKGBQT")
     assert f.status == 200 and "GEL-NYC" in f.text
+
+
+async def test_a_crashed_tab_is_replaced(shopnet):
+    fetcher, _, _ = shopnet
+    await fetcher.fetch(FK + "?pid=SHOHGFW7FVKGBQT")
+    page = fetcher._pages["https://www.flipkart.com"]
+    try:
+        await page.goto("chrome://crash", timeout=3000)
+    except Exception:  # noqa: BLE001 - the navigation dies with the tab
+        pass
+    f = await fetcher.fetch(FK + "?pid=SHOHGFW7FVKGBQT")
+    if f.status != 200:  # the first try finds the dead tab, the next one uses a fresh tab
+        f = await fetcher.fetch(FK + "?pid=SHOHGFW7FVKGBQT")
+    assert f.status == 200 and "GEL-NYC" in f.text
+    assert fetcher._pages["https://www.flipkart.com"] is not page
+
+
+async def test_browser_window_closed_by_hand_comes_back_without_leaking(shopnet):
+    fetcher, _, _ = shopnet
+    await fetcher.fetch(FK + "?pid=SHOHGFW7FVKGBQT")
+    driver = fetcher._pw
+    await fetcher._ctx.close()  # as if the user closed the window
+    assert not fetcher.running
+    f = await fetcher.fetch(FK + "?pid=SHOHGFW7FVKGBQT")
+    assert f.status == 200 and "GEL-NYC" in f.text
+    assert fetcher._pw is driver  # the same Playwright driver, not a second one
+
+
+async def test_offline_reads_as_no_answer_and_recovers(shopnet):
+    from tracd.models import ShopError
+
+    fetcher, _, state = shopnet
+    shop = shop_for(FK)
+    await shop.read(fetcher, FK + "?pid=SHOHGFW7FVKGBQT")
+    state["offline"] = True
+    with pytest.raises(ShopError) as e:
+        await shop.read(fetcher, FK + "?pid=SHOHGFW7FVKGBQT")
+    assert "no answer from the shop" in e.value.detail
+    state["offline"] = False
+    p = await shop.read(fetcher, FK + "?pid=SHOHGFW7FVKGBQT")
+    assert len(p.sizes) == 6
 
 
 async def test_restock_end_to_end_through_the_browser(shopnet):

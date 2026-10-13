@@ -84,6 +84,7 @@ class BrowserFetcher:
         self._pages: dict[str, object] = {}
         self._opened: dict[str, float] = {}
         self._locks: dict[str, asyncio.Lock] = {}
+        self._crashed: set[int] = set()  # ids of tabs whose page crashed
         self._start_lock = asyncio.Lock()
         self._closed = False
 
@@ -102,7 +103,8 @@ class BrowserFetcher:
             except ImportError as e:  # pragma: no cover - checked by the installer
                 raise RuntimeError("Playwright is missing. Run: pip install playwright") from e
             self.profile_dir.mkdir(parents=True, exist_ok=True)
-            self._pw = await async_playwright().start()
+            if self._pw is None:  # reused after the window was closed, so no driver is left behind
+                self._pw = await async_playwright().start()
             common = dict(user_data_dir=str(self.profile_dir), headless=self.headless, args=LAUNCH_ARGS)
             if not self.headless:
                 common["no_viewport"] = True
@@ -176,6 +178,7 @@ class BrowserFetcher:
                 # Reuse the blank first tab if there is one.
                 blank = [p for p in self._ctx.pages if p.url in ("about:blank", "") and p not in self._pages.values()]
                 page = blank[0] if blank else await self._ctx.new_page()
+                page.on("crash", lambda p: self._crashed.add(id(p)))
                 self._pages[origin] = page
                 await self._goto(page, page_url or url)
                 self._opened[origin] = time.monotonic()
@@ -186,7 +189,8 @@ class BrowserFetcher:
 
     async def _goto(self, page, url: str) -> None:
         try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+            # Short enough that loading the tab and the request after it fit in one check.
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
         except Exception as e:  # noqa: BLE001 - the fetch below reports what is wrong
             self.log(f"{urlparse(url).hostname}: page load problem: {str(e).splitlines()[0][:140]}")
 
@@ -202,12 +206,22 @@ class BrowserFetcher:
                     JS_FETCH, {"url": url, "timeoutMs": int(self.timeout * 1000), "kind": kind, "maxChars": 8_000_000}
                 )
                 return Fetched(int(res.get("status") or 0), res.get("text") or "", res.get("url") or url, int(res.get("ms") or 0))
-            except Exception as e:  # noqa: BLE001 - the tab navigated or closed mid-call: try once more
+            except Exception as e:  # noqa: BLE001 - the tab navigated, closed or crashed mid-call: try once more
                 err = str(e).splitlines()[0][:200]
-                if page.is_closed():
-                    self._pages.pop(origin_of(url), None)
+                if page.is_closed() or id(page) in self._crashed or "crash" in err.lower():
+                    await self._drop(origin_of(url), page)
                 await asyncio.sleep(0.3)
         return Fetched(0, err, url, int((time.monotonic() - t0) * 1000))
+
+    async def _drop(self, origin: str, page) -> None:
+        """Forget a dead tab so the next request opens a fresh one."""
+        if self._pages.get(origin) is page:
+            self._pages.pop(origin, None)
+        self._crashed.discard(id(page))
+        try:
+            await page.close()
+        except Exception:  # noqa: BLE001 - already gone
+            pass
 
     async def final_url(self, url: str) -> str:
         """Open a share link in a scratch tab and return where it lands."""
