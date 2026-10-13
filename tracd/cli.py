@@ -335,35 +335,66 @@ def cmd_test_alert(opts: argparse.Namespace) -> int:
 # --------------------------------------------------------------------------
 
 
-def _startup_target() -> tuple[Path, str]:
+def _run_args(opts: argparse.Namespace | None = None) -> list[str]:
+    """The options the signed-in start should use: the same data folder, port and
+    browser choices as now."""
+    args = ["-m", "tracd", "--no-open", "--quiet"]
+    home = getattr(opts, "home", None) or os.environ.get("TRACD_HOME")
+    if home:
+        args += ["--home", str(Path(home).expanduser().resolve())]
+    port = getattr(opts, "port", DEFAULT_PORT)
+    if port and port != DEFAULT_PORT:
+        args += ["--port", str(port)]
+    for flag in ("lan", "show_browser", "headless"):
+        if getattr(opts, flag, False):
+            args.append("--" + flag.replace("_", "-"))
+    if getattr(opts, "browser_path", ""):
+        args += ["--browser-path", opts.browser_path]
+    return args
+
+
+def _desktop_quote(a: str) -> str:
+    """Quote one argument for a .desktop Exec line (freedesktop rules)."""
+    if a and not any(c in a for c in " \t\n\"'\\$`<>|&;()*?#~=%"):
+        return a
+    return '"' + "".join("\\" + c if c in '"`$\\' else c for c in a).replace("%", "%%") + '"'
+
+
+def _startup_target(opts: argparse.Namespace | None = None) -> tuple[Path, str]:
+    from xml.sax.saxutils import escape
+
     py = Path(sys.executable)
+    args = _run_args(opts)
     if sys.platform == "win32":
         pyw = py.with_name("pythonw.exe")
         exe = pyw if pyw.exists() else py
         folder = Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
-        body = f'CreateObject("Wscript.Shell").Run """{exe}"" -m tracd --no-open --quiet", 0, False\r\n'
+        cmd = " ".join(f'""{a}""' if (" " in a or not a) else a for a in [str(exe)] + args)
+        body = f'CreateObject("Wscript.Shell").Run "{cmd}", 0, False\r\n'
         return folder / "Tracd.vbs", body
     if sys.platform == "darwin":
+        prog = "".join(f"<string>{escape(a)}</string>" for a in [str(py)] + args)
         plist = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>Label</key><string>com.tracd</string>
-<key>ProgramArguments</key><array><string>{py}</string><string>-m</string><string>tracd</string><string>--no-open</string><string>--quiet</string></array>
+<key>ProgramArguments</key><array>{prog}</array>
 <key>RunAtLoad</key><true/>
+<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
 </dict></plist>
 """
         return Path.home() / "Library" / "LaunchAgents" / "com.tracd.plist", plist
     desktop = f"""[Desktop Entry]
 Type=Application
 Name=Tracd
-Exec={py} -m tracd --no-open --quiet
+Exec={" ".join(_desktop_quote(a) for a in [str(py)] + args)}
 X-GNOME-Autostart-enabled=true
 """
     return Path.home() / ".config" / "autostart" / "tracd.desktop", desktop
 
 
 def cmd_autostart(opts: argparse.Namespace) -> int:
-    path, body = _startup_target()
+    path, body = _startup_target(opts)
     if opts.state == "on":
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(body, encoding="utf-8")
@@ -405,8 +436,14 @@ def build_parser() -> argparse.ArgumentParser:
     t = sub.add_parser("test-alert", parents=[common], help="send a test alert to your phone")
     t.set_defaults(func=cmd_test_alert)
 
-    a = sub.add_parser("autostart", help="start Tracd when you sign in")
+    a = sub.add_parser("autostart", help="start Tracd when you sign in (with the options given here)")
     a.add_argument("state", choices=["on", "off"])
+    # Also accepted after "autostart"; SUPPRESS keeps ones given before it.
+    a.add_argument("--home", default=argparse.SUPPRESS)
+    a.add_argument("--port", type=int, default=argparse.SUPPRESS)
+    a.add_argument("--browser-path", default=argparse.SUPPRESS)
+    for flag in ("--lan", "--show-browser", "--headless"):
+        a.add_argument(flag, action="store_true", default=argparse.SUPPRESS)
     a.set_defaults(func=cmd_autostart)
     return ap
 

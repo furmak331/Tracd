@@ -105,3 +105,39 @@ def test_port_is_free_again_right_after_a_restart():
         assert not cli.port_free("127.0.0.1", busy.getsockname()[1])
     finally:
         busy.close()
+
+
+def test_autostart_keeps_the_data_folder_and_port(monkeypatch, tmp_path):
+    monkeypatch.setattr(cli.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(sys, "executable", "/opt/my apps/python3")
+    monkeypatch.delenv("TRACD_HOME", raising=False)
+    home = tmp_path / "My Tracd"
+    opts = cli.build_parser().parse_args(["--home", str(home), "autostart", "on", "--port", "9000"])
+    _, body = cli._startup_target(opts)
+    exec_line = next(x for x in body.splitlines() if x.startswith("Exec="))
+    import shlex
+
+    assert shlex.split(exec_line[5:]) == ["/opt/my apps/python3", "-m", "tracd", "--no-open", "--quiet",
+                                          "--home", str(home.resolve()), "--port", "9000"]
+
+
+def test_autostart_on_a_mac_restarts_after_a_crash(monkeypatch, tmp_path):
+    monkeypatch.setattr(cli.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setenv("TRACD_HOME", str(tmp_path / "a&b"))
+    path, body = cli._startup_target(cli.build_parser().parse_args(["autostart", "on"]))
+    import plistlib
+
+    d = plistlib.loads(body.encode())
+    assert d["KeepAlive"] == {"SuccessfulExit": False}
+    assert d["ProgramArguments"][-2:] == ["--home", str((tmp_path / "a&b").resolve())]
+
+
+def test_windows_autostart_quotes_paths_with_spaces(monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    home = tmp_path / "My Tracd"
+    monkeypatch.setenv("TRACD_HOME", str(home))
+    _, body = cli._startup_target(None)
+    assert f'--home ""{home.resolve()}""' in body
