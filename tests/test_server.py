@@ -179,3 +179,75 @@ async def test_live_stream(client, store):
             break
     assert seen == ["log"]
     r.close()
+
+
+async def test_a_key_with_odd_characters_is_refused_not_a_crash(aiohttp_client, store, engine, fetcher):
+    client = await aiohttp_client(create_app(store, engine, fetcher, lan_key="sekret"))
+    r = await client.get("/api/state", headers={"Host": "192.168.1.5:8723"}, params={"key": "sékrét✓"})
+    assert r.status == 401
+
+
+@pytest.mark.parametrize("body", [
+    {"repeat_alerts": "lots"}, {"repeat_every": "1e999"}, {"default_interval": None}, {"blind_after": "abc"},
+    {"repeat_alerts": [1]}, {"lan_key": "mine"},
+])
+async def test_odd_settings_values_never_break_the_app(client, store, body):
+    st, d = await post(client, "/api/settings", body, method="PUT")
+    assert st == 200, d
+    assert "lan_key" not in d["settings"]
+    assert store.settings()["lan_key"] != "mine"
+    assert 1 <= store.settings()["repeat_alerts"] <= 30 and 5 <= store.settings()["repeat_every"] <= 600
+
+
+async def test_a_page_that_trips_up_a_reader_gets_a_friendly_answer(client, monkeypatch):
+    from tracd.shops.flipkart import Flipkart
+
+    async def boom(self, fetcher, url):
+        raise AttributeError("'list' object has no attribute 'get'")
+
+    monkeypatch.setattr(Flipkart, "load", boom)
+    st, d = await post(client, "/api/resolve", {"text": FK})
+    assert st == 422 and "could not read that page" in d["error"]
+    st, d = await post(client, "/api/watches", {"url": FK, "size_id": "SHOHGFW7FVKGBQT"})
+    assert st == 422 and "could not read" in d["error"]
+
+
+async def test_any_unexpected_api_error_is_answered_in_words(client, monkeypatch, store):
+    def boom(*a, **k):
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(store, "events", boom)
+    st, d = await post(client, "/api/resolve", {"text": FK})
+    _, d = await post(client, "/api/watches", {"url": FK, "size_id": "SHOHGFW7FVKGBQT"})
+    r = await client.get(f"/api/watches/{d['watch']['id']}/events")
+    assert r.status == 500 and "Something went wrong" in (await r.json())["error"]
+
+
+async def test_shutdown_is_quick_with_a_dashboard_open(store, engine, fetcher):
+    import time
+
+    from aiohttp import ClientSession, web
+
+    app = create_app(store, engine, fetcher)
+    runner = web.AppRunner(app, shutdown_timeout=3)
+    await runner.setup()
+    site = web.TCPSite(runner, "127.0.0.1", 0)
+    await site.start()
+    port = site._server.sockets[0].getsockname()[1]
+    async with ClientSession() as http:
+        r = await http.get(f"http://127.0.0.1:{port}/api/stream")
+        await r.content.readline()
+        t = time.monotonic()
+        await runner.cleanup()
+        assert time.monotonic() - t < 2
+        r.close()
+    assert engine.listeners == set()
+
+
+def test_lan_key_survives_a_restart(tmp_path):
+    from tracd.store import Store
+
+    s = Store(tmp_path / "tracd.db")
+    s.update_settings(lan_key="abc123")
+    s.close()
+    assert Store(tmp_path / "tracd.db").settings()["lan_key"] == "abc123"

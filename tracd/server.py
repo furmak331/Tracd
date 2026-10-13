@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import logging
 import secrets
 import time
 from pathlib import Path
@@ -17,7 +18,9 @@ from .engine import Engine
 from .extract import first_url
 from .models import Product, ShopError
 from .shops import BY_KEY, GENERIC, SHOPS, is_short_link, shop_for
-from .store import SECRET_SETTINGS, Store
+from .store import INTERNAL_SETTINGS, SECRET_SETTINGS, Store
+
+log = logging.getLogger("tracd")
 
 WEB = Path(__file__).parent / "web"
 MIN_INTERVAL, MAX_INTERVAL = 5, 3600
@@ -39,6 +42,7 @@ class Api:
         self.fetcher = fetcher
         self.demo = demo
         self.products: dict[str, tuple[Product, float]] = {}  # resolved products, by product url
+        self.streams: set[asyncio.Task] = set()  # open live-update connections
 
     # -- helpers ---------------------------------------------------------------
 
@@ -47,6 +51,8 @@ class Api:
         for k in SECRET_SETTINGS:
             s[k + "_set"] = bool(s.get(k))
             s[k] = ""
+        for k in INTERNAL_SETTINGS:
+            s.pop(k, None)
         return s
 
     def state(self) -> dict:
@@ -93,6 +99,10 @@ class Api:
             return _err(_sentence(e.detail), 422)
         except asyncio.TimeoutError:
             return _err("The shop took too long to answer. Try again in a moment.", 504)
+        except Exception as e:  # noqa: BLE001 - an odd page must get an answer, not a crash
+            log.exception("reading a pasted link failed")
+            return _err(f"Tracd could not read that page ({e.__class__.__name__}). "
+                        "If it is a product page, please report the link so the shop can be supported.", 422)
         shop = BY_KEY.get(product.shop, GENERIC)
         existing = {}
         for w in self.store.watches():
@@ -114,6 +124,9 @@ class Api:
             return _err(_sentence(e.detail), 422)
         except asyncio.TimeoutError:
             return _err("The shop took too long to answer. Try again in a moment.", 504)
+        except Exception as e:  # noqa: BLE001
+            log.exception("reading a product to watch failed")
+            return _err(f"Tracd could not read that page ({e.__class__.__name__}). Try pasting the link again.", 422)
         size = product.size(size_id)
         if size is None:
             return _err("That size is not on the product page any more. Paste the link again.", 409)
@@ -188,13 +201,17 @@ class Api:
         body = await _body(request)
         clean = {}
         for k, v in body.items():
+            if k in INTERNAL_SETTINGS:
+                continue
             if k in SECRET_SETTINGS and (v is None or v == ""):
                 continue  # blank = keep the saved secret
             clean[k] = v
         if "repeat_alerts" in clean:
-            clean["repeat_alerts"] = max(1, min(30, int(clean["repeat_alerts"] or 1)))
+            clean["repeat_alerts"] = _clamp(clean["repeat_alerts"], 1, 30, 5)
         if "repeat_every" in clean:
-            clean["repeat_every"] = max(5, min(600, int(clean["repeat_every"] or 20)))
+            clean["repeat_every"] = _clamp(clean["repeat_every"], 5, 600, 20)
+        if "blind_after" in clean:
+            clean["blind_after"] = _clamp(clean["blind_after"], 30, 3600, 180)
         if "default_interval" in clean:
             clean["default_interval"] = _interval(clean["default_interval"], 15)
         if "ntfy_topic" in clean:
@@ -208,7 +225,7 @@ class Api:
 
     async def clear_secret(self, request: web.Request) -> web.Response:
         key = request.match_info["key"]
-        if key not in SECRET_SETTINGS:
+        if key not in SECRET_SETTINGS or key in INTERNAL_SETTINGS:
             raise web.HTTPNotFound()
         self.store.update_settings(**{key: ""})
         return _json({"settings": self.public_settings(), "channels": self.engine.notifier.channels()})
@@ -266,6 +283,9 @@ class Api:
         })
         await resp.prepare(request)
         q = self.engine.subscribe()
+        me = asyncio.current_task()
+        if me:
+            self.streams.add(me)
         try:
             await resp.write(b"event: hello\ndata: {}\n\n")
             while True:
@@ -274,11 +294,17 @@ class Api:
                     await resp.write(("data: " + json.dumps(ev, ensure_ascii=False) + "\n\n").encode())
                 except asyncio.TimeoutError:
                     await resp.write(b": ping\n\n")
-        except (ConnectionResetError, asyncio.CancelledError):
+        except ConnectionResetError:
             pass
         finally:
             self.engine.unsubscribe(q)
+            self.streams.discard(me)
         return resp
+
+    async def close_streams(self, app: web.Application) -> None:
+        """Open dashboards would otherwise hold the shutdown up for a minute."""
+        for t in list(self.streams):
+            t.cancel()
 
     async def index(self, request: web.Request) -> web.Response:
         return web.FileResponse(WEB / "index.html", headers={"Cache-Control": "no-cache"})
@@ -292,12 +318,16 @@ def _sentence(s: str) -> str:
     return s if s.endswith((".", "!", "?")) else s + "."
 
 
-def _interval(v: Any, default: int) -> int:
+def _clamp(v: Any, lo: int, hi: int, default: int) -> int:
     try:
         n = int(float(v))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         n = int(default)
-    return max(MIN_INTERVAL, min(MAX_INTERVAL, n))
+    return max(lo, min(hi, n))
+
+
+def _interval(v: Any, default: int) -> int:
+    return _clamp(v, MIN_INTERVAL, MAX_INTERVAL, default)
 
 
 async def _body(request: web.Request) -> dict:
@@ -323,7 +353,7 @@ def guard(lan_key: str | None):
             if not lan_key:
                 return web.Response(status=403, text="Tracd only answers on this computer. Start it with --lan to use it from your phone.")
             given = request.query.get("key") or request.cookies.get("tracd_key") or request.headers.get("X-Tracd-Key")
-            if not given or not secrets.compare_digest(given, lan_key):
+            if not given or not secrets.compare_digest(given.encode(), lan_key.encode()):
                 return web.Response(status=401, text="Open the link with the key that Tracd printed when it started.")
         if request.method not in ("GET", "HEAD", "OPTIONS"):
             if "application/json" not in request.headers.get("Content-Type", ""):
@@ -331,7 +361,15 @@ def guard(lan_key: str | None):
             origin = request.headers.get("Origin")
             if origin and origin.split("://", 1)[-1].lower() != (request.host or "").lower():
                 return _err("Cross-site request refused.", 403)
-        resp = await handler(request)
+        try:
+            resp = await handler(request)
+        except web.HTTPException:
+            raise
+        except Exception as e:  # noqa: BLE001 - always answer the dashboard in words
+            if not request.path.startswith("/api/"):
+                raise
+            log.exception("request failed: %s %s", request.method, request.path)
+            resp = _err(f"Something went wrong ({e.__class__.__name__}). Try again; details are in tracd.log.", 500)
         if not local and lan_key and request.query.get("key"):
             resp.set_cookie("tracd_key", lan_key, httponly=True, samesite="Strict", max_age=3600 * 24 * 365)
         resp.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -345,6 +383,7 @@ def create_app(store: Store, engine: Engine, fetcher: Any, *, demo: bool = False
     api = Api(store, engine, fetcher, demo=demo)
     app = web.Application(middlewares=[guard(lan_key)], client_max_size=256 * 1024)
     app["api"] = api
+    app.on_shutdown.append(api.close_streams)
     r = app.router
     r.add_get("/", api.index)
     r.add_get("/api/state", api.get_state)
