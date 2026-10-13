@@ -83,6 +83,10 @@ class Flipkart(Shop):
         offer = (offers_of(ld) or [{}])[0]
         avail = schema_availability(offer.get("availability"))
         price = to_float(offer.get("price"))
+        if pid_wanted and str(ld.get("sku") or "") != pid_wanted:
+            # The page's product data is for another variant (or does not say
+            # which): its stock word says nothing about the size in the link.
+            pid, avail = pid_wanted, None
 
         sizes = self._atlas_sizes(html, url) or self._swatch_sizes(html, url) or self._link_sizes(html, url)
         if sizes and "UK/India Size" in html and all(re.fullmatch(r"\d{1,2}(?:\.\d)?", s.label) for s in sizes):
@@ -99,7 +103,10 @@ class Flipkart(Shop):
                 note = ("Flipkart did not show its size list for this item. Choose your size on Flipkart, "
                         "then paste that page's link here.")
         else:
-            sel.available = avail
+            if sel.available is None:
+                sel.available = avail
+            elif avail is not None and sel.available != avail:
+                sel.available = None  # the size tile and the product data disagree: don't guess
             sel.price = price or sel.price
         return Product(
             shop=self.key,

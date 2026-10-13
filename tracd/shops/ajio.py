@@ -48,9 +48,16 @@ class Ajio(Shop):
             return self.parse_api(url, f.text)
         except Blocked:
             raise
-        except ShopError:
-            f = ensure_ok(await fetcher.fetch(url))
-            return self.parse_page(url, f.text)
+        except ShopError as api_error:
+            # The product page carries the same data; if that fails too, the
+            # API's answer is the more telling one.
+            try:
+                f = ensure_ok(await fetcher.fetch(url))
+                return self.parse_page(url, f.text)
+            except Blocked:
+                raise
+            except ShopError:
+                raise api_error from None
 
     def parse_api(self, url: str, text: str) -> Product:
         try:

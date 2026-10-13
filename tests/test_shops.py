@@ -144,6 +144,24 @@ def test_flipkart_different_variant_is_unknown_not_a_false_alert():
     assert r.state == Stock.UNKNOWN
 
 
+def test_flipkart_product_data_without_a_sku_is_not_trusted_for_the_size_in_the_link():
+    html = '<script type="application/ld+json">{"@type":"Product","name":"X","offers":{"price":1,"availability":"InStock"}}</script>'
+    shop = Flipkart()
+    p = shop.parse("https://www.flipkart.com/x/p/itmabc?pid=WANTEDPID0000001", html)
+    assert shop.reading(p, "WANTEDPID0000001", "Size in your link").state == Stock.UNKNOWN
+
+
+def test_flipkart_size_tile_and_product_data_disagreeing_is_unknown(catalog):
+    from tracd.samples import flipkart_page
+
+    item = catalog[0]
+    pid = "SHOHGFW7FVKGBQT"  # UK 9, sold out in the tiles
+    html = flipkart_page(item, pid).replace("schema.org/OutOfStock", "schema.org/InStock")
+    shop = Flipkart()
+    p = shop.parse(item.url + "?pid=" + pid, html)
+    assert shop.reading(p, pid, "UK 9").state == Stock.UNKNOWN
+
+
 def test_flipkart_falls_back_to_size_links_when_swatch_data_moves():
     html = (
         '<script>window.__INITIAL_STATE__ = {"somethingElse": {}};</script>'
@@ -283,6 +301,13 @@ async def test_ajio_falls_back_to_the_page_when_the_api_moves(catalog):
     p = await Ajio().load(f, item.url)
     assert len(p.sizes) == 6
     assert len(f.calls) == 2
+
+
+async def test_ajio_busy_api_is_not_reported_as_a_missing_page():
+    f = StaticFetcher({"/api/p/": (503, "busy"), "/p/123_red": (404, "not found")})
+    with pytest.raises(ShopError) as e:
+        await Ajio().load(f, "https://www.ajio.com/x/p/123_red")
+    assert "503" in e.value.detail and "no longer exists" not in e.value.detail
 
 
 async def test_ajio_blocked_api_is_not_retried_on_the_page():

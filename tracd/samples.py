@@ -294,10 +294,12 @@ class SampleFetcher:
             return myntra_page(it) if it else None
         if host.endswith("ajio.com"):
             m = re.search(r"/api/p/([^/?]+)", path)
-            if not m:
-                return None
-            it = self._find("ajio", lambda i: i.item_id == m.group(1))
-            return ajio_json(it) if it else None
+            if m:
+                it = self._find("ajio", lambda i: i.item_id == m.group(1))
+                return ajio_json(it) if it else None
+            it = self._find("ajio", lambda i: path == urlparse(i.url).path)
+            return ("<script>window.__PRELOADED_STATE__ = {\"product\": {\"productDetails\": "
+                    + ajio_json(it) + "}};</script>") if it else None
         if host.endswith("amazon.in"):
             m = re.search(r"/dp/([A-Z0-9]{10})", path)
             it = self._find("amazon", lambda i: m and i.size(m.group(1)) is not None) if m else None

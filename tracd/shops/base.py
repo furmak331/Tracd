@@ -99,7 +99,12 @@ class Shop:
 
     async def read(self, fetcher: Fetcher, url: str) -> Product:
         """Load the product and keep only links that are safe to open."""
-        return self.tidy(await self.load(fetcher, url), url)
+        try:
+            p = await self.load(fetcher, url)
+        except (AttributeError, KeyError, TypeError, IndexError, ValueError, RecursionError) as e:
+            # Shops change their pages without notice; an odd shape is "can't read", not a crash.
+            raise ShopError(f"the page is laid out in a way Tracd does not know yet ({e.__class__.__name__})") from e
+        return self.tidy(p, url)
 
     def tidy(self, p: Product, url: str) -> Product:
         hosts = self.domains or (_site(url),)
