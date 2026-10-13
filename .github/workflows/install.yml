@@ -1,0 +1,76 @@
+name: install
+
+# Sets Tracd up from scratch with the start scripts a user double-clicks,
+# checks the dashboard answers, then starts it again to make sure the
+# second start skips the install.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  start-script:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: First start (installs)
+        if: runner.os != 'Windows'
+        run: |
+          export TRACD_HOME="$RUNNER_TEMP/tracd-home"
+          ./start.sh --demo --no-open --port 8723 > first.log 2>&1 &
+          for i in $(seq 1 120); do curl -sf http://127.0.0.1:8723/api/state > state.json && break; sleep 2; done
+          cat first.log
+          grep -q '"examples"' state.json
+          curl -sf http://127.0.0.1:8723/ | grep -q '<title>Tracd</title>'
+          kill %1; sleep 2
+      - name: Second start (no install)
+        if: runner.os != 'Windows'
+        run: |
+          export TRACD_HOME="$RUNNER_TEMP/tracd-home"
+          ./start.sh --demo --no-open --port 8723 > second.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8723/api/state > /dev/null && break; sleep 1; done
+          curl -sf http://127.0.0.1:8723/api/state > /dev/null
+          cat second.log
+          ! grep -q "Installing" second.log
+          kill %1
+
+      - name: First start (installs)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:TRACD_HOME = "$env:RUNNER_TEMP\tracd-home"
+          $p = Start-Process cmd -ArgumentList '/c', 'start.bat --demo --no-open --port 8723 > first.log 2>&1' -PassThru -NoNewWindow
+          $ok = $false
+          foreach ($i in 1..120) {
+            try { $r = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8723/api/state; if ($r.Content -match '"examples"') { $ok = $true; break } } catch {}
+            Start-Sleep 2
+          }
+          Get-Content first.log
+          if (-not $ok) { throw "dashboard did not answer" }
+          $html = (Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8723/).Content
+          if ($html -notmatch '<title>Tracd</title>') { throw "wrong page" }
+          taskkill /F /T /PID $p.Id | Out-Null
+          Start-Sleep 2
+      - name: Second start (no install)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:TRACD_HOME = "$env:RUNNER_TEMP\tracd-home"
+          $p = Start-Process cmd -ArgumentList '/c', 'start.bat --demo --no-open --port 8723 > second.log 2>&1' -PassThru -NoNewWindow
+          $ok = $false
+          foreach ($i in 1..30) {
+            try { Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8723/api/state | Out-Null; $ok = $true; break } catch {}
+            Start-Sleep 1
+          }
+          Get-Content second.log
+          if (-not $ok) { throw "dashboard did not answer on the second start" }
+          if (Select-String -Path second.log -Pattern 'Installing' -Quiet) { throw "second start reinstalled" }
+          taskkill /F /T /PID $p.Id | Out-Null
