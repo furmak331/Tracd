@@ -203,7 +203,7 @@ async def test_a_page_that_trips_up_a_reader_gets_a_friendly_answer(client, monk
     from tracd.shops.flipkart import Flipkart
 
     async def boom(self, fetcher, url):
-        raise AttributeError("'list' object has no attribute 'get'")
+        raise RuntimeError("something unexpected")
 
     monkeypatch.setattr(Flipkart, "load", boom)
     st, d = await post(client, "/api/resolve", {"text": FK})
