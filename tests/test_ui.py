@@ -34,6 +34,7 @@ async def app():
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
     base = str(server.make_url("/"))
+    page.engine = engine  # type: ignore[attr-defined]
     yield page, base, catalog, store, errors
     await browser.close()
     await pw.stop()
@@ -131,3 +132,54 @@ async def test_settings_save(app):
     await page.keyboard.press("Escape")
     assert await page.locator("#sheet").is_hidden()
     assert errors == []
+
+
+async def test_dashboard_recovers_if_tracd_was_not_answering_when_it_opened(app):
+    page, base, catalog, store, errors = app
+    store.update_settings(onboarded=True)
+    store.add_watch(shop="flipkart", product_url=FK.split("?")[0], poll_url=FK, title="GEL-NYC", size_id="SHOHGFW7FVKGBQT",
+                    size_label="UK 9", interval=600)
+    state_calls = []
+
+    async def first_fails(route):
+        state_calls.append(1)
+        if len(state_calls) == 1:
+            return await route.abort("connectionrefused")
+        await route.continue_()
+
+    await page.route("**/api/state", first_fails)
+    await page.goto(base)
+    await page.locator("[data-watch]").wait_for(timeout=8000)
+    assert await page.locator("#banner").inner_text() == "" or "Can't reach" not in await page.locator("#banner").inner_text()
+    errors[:] = [e for e in errors if "ERR_CONNECTION_REFUSED" not in e and "Failed to fetch" not in e]
+    assert errors == []
+
+
+async def test_many_dashboard_tabs_share_one_live_connection(app):
+    page, base, catalog, store, errors = app
+    store.update_settings(onboarded=True)
+    ctx = await page.context.browser.new_context()
+    pages = [await ctx.new_page() for _ in range(8)]  # more than a browser's 6-connection limit
+    for p in pages:
+        await p.goto(base)
+        await p.wait_for_selector("text=Nothing watched yet")
+    await asyncio.sleep(1)
+    assert len(page.engine.listeners) == 1
+    # Every tab still gets live updates, and the last tab can still load.
+    store.add_watch(shop="flipkart", product_url=FK.split("?")[0], poll_url=FK, title="GEL-NYC", size_id="SHOHGFW7FVKGBQT",
+                    size_label="UK 9", interval=600)
+    page.engine.publish({"type": "watch", "watch": page.engine.watch_view(store.watches()[0])})
+    for p in pages:
+        await p.locator("[data-watch]").wait_for(timeout=5000)
+    # Close the tab holding the connection: another one takes over.
+    holder = None
+    for p in pages:
+        if await p.evaluate("document.documentElement.dataset.live === 'leader'"):
+            holder = p
+    await holder.close()
+    for _ in range(50):
+        if len(page.engine.listeners) == 1:
+            break
+        await asyncio.sleep(0.1)
+    assert len(page.engine.listeners) == 1
+    await ctx.close()

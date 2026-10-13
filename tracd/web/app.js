@@ -176,39 +176,77 @@ async function loadState() {
   if (!S.settings.onboarded && S.watches.size === 0) showWelcome();
 }
 
+// Live updates. Browsers allow only a few open connections per site, so with
+// several dashboard tabs open just one of them (the "leader", chosen with a
+// Web Lock) holds the stream and passes every event on to the others.
+const tabs = "BroadcastChannel" in window ? new BroadcastChannel("tracd-live") : null;
+let leader = false;
+
+function onEvent(ev) {
+  if (ev.type === "_online") {
+    // (Re)connected: reload everything, in case updates were missed meanwhile.
+    if (ev.online) { S.online = true; loadState().catch(() => {}); }
+    if (!ev.online && S.online) { S.online = false; renderPulse(); }
+  } else if (ev.type === "watch") {
+    const prev = takeWatch(ev.watch);
+    renderWatch(ev.watch.id);
+    renderPulse();
+    renderFilters();
+    if (S.history.has(ev.watch.id) && prev && prev.state !== ev.watch.state) loadHistory(ev.watch.id);
+  } else if (ev.type === "removed") {
+    S.watches.delete(ev.watch_id);
+    S.order = S.order.filter((id) => id !== ev.watch_id);
+    renderWatches();
+    renderPulse();
+  } else if (ev.type === "log") {
+    S.logs.push(ev.log);
+    if (S.logs.length > 200) S.logs.shift();
+    renderLog();
+  } else if (ev.type === "hit") {
+    onHit(ev.watch_id);
+  } else if (ev.type === "alert_status") {
+    S.alertProblem = ev.problem;
+    renderBanner();
+  }
+}
+
+function share(ev) {
+  onEvent(ev);
+  if (tabs) try { tabs.postMessage(ev); } catch { /* tab closing */ }
+}
+
+function stream() {
+  let es;
+  const open = () => {
+    es = new EventSource("/api/stream");
+    es.addEventListener("hello", () => share({ type: "_online", online: true }));
+    es.onmessage = (e) => {
+      let ev;
+      try { ev = JSON.parse(e.data); } catch { return; }
+      share(ev);
+    };
+    es.onerror = () => {
+      share({ type: "_online", online: false });
+      // The browser retries by itself unless the server answered with an error.
+      if (es.readyState === EventSource.CLOSED) setTimeout(open, 3000);
+    };
+  };
+  open();
+}
+
 function connect() {
-  const es = new EventSource("/api/stream");
-  es.addEventListener("hello", () => {
-    if (!S.online) { S.online = true; loadState().catch(() => {}); }
-  });
-  es.onmessage = (e) => {
-    let ev;
-    try { ev = JSON.parse(e.data); } catch { return; }
-    if (ev.type === "watch") {
-      const prev = takeWatch(ev.watch);
-      renderWatch(ev.watch.id);
-      renderPulse();
-      renderFilters();
-      if (S.history.has(ev.watch.id) && prev && prev.state !== ev.watch.state) loadHistory(ev.watch.id);
-    } else if (ev.type === "removed") {
-      S.watches.delete(ev.watch_id);
-      S.order = S.order.filter((id) => id !== ev.watch_id);
-      renderWatches();
-      renderPulse();
-    } else if (ev.type === "log") {
-      S.logs.push(ev.log);
-      if (S.logs.length > 200) S.logs.shift();
-      renderLog();
-    } else if (ev.type === "hit") {
-      onHit(ev.watch_id);
-    } else if (ev.type === "alert_status") {
-      S.alertProblem = ev.problem;
-      renderBanner();
-    }
-  };
-  es.onerror = () => {
-    if (S.online) { S.online = false; renderPulse(); }
-  };
+  if (tabs && navigator.locks) {
+    tabs.onmessage = (m) => { if (!leader) onEvent(m.data); };
+    // Held for as long as this tab is open; the next tab takes over when it closes.
+    navigator.locks.request("tracd-live", () => new Promise(() => {
+      leader = true;
+      document.documentElement.dataset.live = "leader";
+      stream();
+    }));
+  } else {
+    leader = true;
+    stream();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -241,8 +279,8 @@ let titleTimer;
 function onHit(id) {
   const w = S.watches.get(id);
   if (!w) return;
-  chime();
-  if (S.notifyPerm === "granted") {
+  if (leader) chime();  // one sound and one notification, however many tabs are open
+  if (leader && S.notifyPerm === "granted") {
     try {
       const n = new Notification(`${w.size_label} in stock on ${w.shop_name}`, {
         body: w.title, icon: w.image || "/static/icon.svg", requireInteraction: true, tag: "tracd-" + id,
@@ -892,6 +930,12 @@ setInterval(() => {
   document.querySelectorAll("[data-next]").forEach((el) => { el.textContent = nextText(Number(el.dataset.next)); });
 }, 1000);
 
-loadState().then(connect).catch((e) => {
-  replace($("#banner"), h("div", { class: "banner" }, icon("alert"), h("span", { class: "grow" }, e.message)));
+// If Tracd is not running yet, say so and keep trying: the page fills in by
+// itself once it starts.
+S.online = false;
+loadState().then(() => { S.online = true; renderPulse(); }).catch(() => {
+  replace($("#banner"), h("div", { class: "banner" }, icon("alert"),
+    h("span", { class: "grow" }, "Can't reach Tracd on this computer. Is it running? This page will update by itself once it is.")));
+  renderPulse();
 });
+connect();
