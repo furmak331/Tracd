@@ -185,3 +185,29 @@ async def test_many_dashboard_tabs_share_one_live_connection(app):
         await asyncio.sleep(0.1)
     assert len(page.engine.listeners) == 1
     await ctx.close()
+
+
+async def test_a_late_reply_never_shows_an_older_state(app):
+    """On a slow machine the reply to "Watch" can arrive after the live update of
+    the first check; the card must keep showing the newer answer."""
+    page, base, catalog, store, errors = app
+    store.update_settings(onboarded=True)
+
+    async def slow_add(route):
+        if route.request.method == "POST":
+            resp = await route.fetch()
+            await asyncio.sleep(1.5)  # the first check lands meanwhile
+            return await route.fulfill(response=resp)
+        await route.continue_()
+
+    await page.route("**/api/watches", slow_add)
+    await page.goto(base)
+    await page.fill("#link", FK)
+    await page.click("#find-btn")
+    await page.wait_for_selector(".size")
+    await page.click("#watch-btn")
+    card = page.locator("[data-watch]")
+    await card.get_by_text("Sold out", exact=True).wait_for(timeout=5000)
+    await asyncio.sleep(2)  # well after the late reply
+    assert await card.get_by_text("Sold out", exact=True).is_visible()
+    assert errors == []

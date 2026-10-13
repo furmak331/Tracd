@@ -149,11 +149,15 @@ async function busy(btn, fn) {
 // state in
 // ---------------------------------------------------------------------------
 
-function takeWatch(w) {
+// What a check found. Answers can arrive out of order (a slow reply to "add"
+// after the live update of the first check), so an older one never wins.
+const READING = ["state", "detail", "price", "qty", "last_checked", "last_change", "last_in_stock", "checks", "last_ms"];
+
+function takeWatch(w, prev = S.watches.get(w.id)) {
+  if (prev && (prev.checks || 0) > (w.checks || 0)) READING.forEach((k) => { w[k] = prev[k]; });
   w._nextAt = w.next_check_in == null ? null : Date.now() + w.next_check_in * 1000;
-  const prev = S.watches.get(w.id);
   S.watches.set(w.id, w);
-  if (!prev) S.order.push(w.id);
+  if (!S.order.includes(w.id)) S.order.push(w.id);
   return prev;
 }
 
@@ -168,9 +172,10 @@ async function loadState() {
   S.demo = st.demo;
   S.version = st.version;
   S.examples = st.examples || [];
+  const before = new Map(S.watches);
   S.watches.clear();
   S.order = [];
-  st.watches.forEach(takeWatch);
+  st.watches.forEach((w) => takeWatch(w, before.get(w.id)));
   S.interval = S.settings.default_interval || 15;
   renderAll();
   if (!S.settings.onboarded && S.watches.size === 0) showWelcome();
