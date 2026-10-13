@@ -73,7 +73,7 @@ class Api:
                 raise ShopError("That share link did not open a product page. Open it in your browser and copy the page's link instead.")
         shop = shop_for(url)
         shop.canonical_url(url)  # friendly error for links that are not product pages
-        product = await asyncio.wait_for(shop.load(self.fetcher, url), timeout=75)
+        product = await asyncio.wait_for(shop.read(self.fetcher, url), timeout=75)
         self.products[product.url] = (product, time.time())
         # keep the cache small
         for k in [k for k, (_, t) in self.products.items() if time.time() - t > 1800]:

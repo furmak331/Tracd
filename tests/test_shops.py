@@ -412,3 +412,49 @@ def test_generic_single_product():
 def test_demo_catalog_reads_on_every_shop():
     # Guards the samples themselves, which the demo and the UI test rely on.
     assert {i.shop for i in demo_catalog()} == {"flipkart", "tatacliq", "nykaa", "myntra", "ajio", "amazon"}
+
+
+async def test_every_demo_example_link_reads():
+    """The example links offered in demo mode must all work."""
+    from tracd.samples import DemoFetcher
+    from tracd.shops import shop_for
+
+    f = DemoFetcher()
+    for item in f.items:
+        p = await shop_for(item.url).load(f, item.url)
+        assert len(p.sizes) == len(item.sizes), item.shop
+
+
+class _OnePage:
+    def __init__(self, html):
+        self.html = html
+
+    async def fetch(self, url, *, kind="html", page_url=None):
+        return Fetched(200, self.html, url)
+
+
+async def test_links_from_a_page_are_only_kept_when_safe_to_open():
+    offers = [
+        {"@type": "Offer", "name": "S", "sku": "s", "availability": "InStock", "url": "javascript:alert(1)"},
+        {"@type": "Offer", "name": "M", "sku": "m", "availability": "InStock", "url": "https://evil.example/phish"},
+        {"@type": "Offer", "name": "L", "sku": "l", "availability": "InStock", "url": "/p/shirt?size=l"},
+        {"@type": "Offer", "name": "XL", "sku": "xl", "availability": "InStock", "url": "https://m.shop.example/p?x"},
+    ]
+    ld = {"@context": "https://schema.org", "@type": "Product", "name": "Shirt", "image": "javascript:x()",
+          "offers": offers}
+    html = f'<script type="application/ld+json">{json.dumps(ld)}</script>'
+    p = await GENERIC.read(_OnePage(html), "https://www.shop.example/p/shirt")
+    urls = {s.label: s.url for s in p.sizes}
+    assert urls["S"] is None and urls["M"] is None
+    assert urls["L"] == "https://www.shop.example/p/shirt?size=l"
+    assert urls["XL"] == "https://m.shop.example/p?x"
+    assert p.image is None
+    assert p.url.startswith("https://www.shop.example/")
+
+
+def test_a_stored_link_that_is_not_a_web_link_is_never_opened():
+    from tracd.store import Watch
+
+    w = Watch(id=1, shop="other", product_url="https://a.example/p", poll_url="https://a.example/p", title="t",
+              size_id="s", size_label="S", size_url="javascript:alert(1)")
+    assert w.open_url == "https://a.example/p"

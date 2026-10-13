@@ -60,7 +60,10 @@ class Watch:
 
     @property
     def open_url(self) -> str:
-        return self.size_url or self.poll_url or self.product_url
+        for u in (self.size_url, self.poll_url, self.product_url):
+            if u and u.lower().startswith(("https://", "http://")):
+                return u
+        return self.product_url
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)

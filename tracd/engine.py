@@ -195,7 +195,7 @@ class Engine:
         try:
             async with self._sem(host_of(url)):
                 try:
-                    product = await asyncio.wait_for(shop.load(self.fetcher, url), timeout=self.load_timeout)
+                    product = await asyncio.wait_for(shop.read(self.fetcher, url), timeout=self.load_timeout)
                     readings = {w.id: shop.reading(product, w.size_id, w.size_label) for w in ws}
                 except ShopError as e:
                     readings = {w.id: Reading(e.state, e.detail) for w in ws}

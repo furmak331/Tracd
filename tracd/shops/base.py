@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Protocol
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 
 from ..extract import looks_blocked, norm_label
 from ..models import Blocked, Fetched, Product, Reading, ShopError, Stock
@@ -20,6 +20,40 @@ class Fetcher(Protocol):
 
 def host_of(url: str) -> str:
     return (urlparse(url).hostname or "").lower()
+
+
+def _site(url: str) -> str:
+    h = host_of(url)
+    return h[4:] if h.startswith("www.") else h
+
+
+def safe_link(url: str | None, base: str, hosts: tuple[str, ...]) -> str | None:
+    """`url` made absolute against `base`, or None unless it is an http(s) link on
+    one of `hosts` (or a subdomain). Pages can put anything in their data, and these
+    links end up in the browser, in alerts and on the dashboard."""
+    if not url or not isinstance(url, str):
+        return None
+    try:
+        full = urljoin(base, url.strip())
+        u = urlparse(full)
+    except ValueError:
+        return None
+    h = (u.hostname or "").lower()
+    if u.scheme not in ("http", "https") or not h:
+        return None
+    return full if any(h == d or h.endswith("." + d) for d in hosts if d) else None
+
+
+def safe_image(url: str | None, base: str) -> str | None:
+    """Product pictures come from any CDN, but only over http(s)."""
+    if not url or not isinstance(url, str):
+        return None
+    try:
+        full = urljoin(base, url.strip())
+        ok = urlparse(full).scheme in ("http", "https") and urlparse(full).hostname
+    except ValueError:
+        return None
+    return full if ok else None
 
 
 def query(url: str, key: str) -> str | None:
@@ -62,6 +96,18 @@ class Shop:
 
     async def load(self, fetcher: Fetcher, url: str) -> Product:
         raise NotImplementedError
+
+    async def read(self, fetcher: Fetcher, url: str) -> Product:
+        """Load the product and keep only links that are safe to open."""
+        return self.tidy(await self.load(fetcher, url), url)
+
+    def tidy(self, p: Product, url: str) -> Product:
+        hosts = self.domains or (_site(url),)
+        p.url = safe_link(p.url, url, hosts) or url
+        for s in p.sizes:
+            s.url = safe_link(s.url, p.url, hosts)
+        p.image = safe_image(p.image, p.url)
+        return p
 
     def poll_url(self, product_url: str, size_id: str, size_url: str | None) -> str:
         """The link to fetch on each check. Most shops list every size on the

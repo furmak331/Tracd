@@ -229,7 +229,7 @@ async def check(opts: argparse.Namespace) -> int:
         print(f"Shop: {shop.name}")
         t0 = asyncio.get_running_loop().time()
         try:
-            p = await shop.load(fetcher, url)
+            p = await shop.read(fetcher, url)
         except ShopError as e:
             print(f"Could not read it: {e.detail}  [{e.state.value}]")
             return 1
@@ -252,7 +252,7 @@ async def check(opts: argparse.Namespace) -> int:
             if not want:
                 print(f"No size called {opts.size!r} here.")
                 return 1
-            r = shop.reading(await shop.load(fetcher, shop.poll_url(p.url, want[0].id, want[0].url)), want[0].id, want[0].label)
+            r = shop.reading(await shop.read(fetcher, shop.poll_url(p.url, want[0].id, want[0].url)), want[0].id, want[0].label)
             print(f"{want[0].label}: {r.state.value} ({r.detail})")
         return 0
     finally:
