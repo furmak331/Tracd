@@ -312,7 +312,7 @@ def demo_catalog() -> list[SampleItem]:
                    "ASICS GEL-NYC Sneakers For Men", "ASICS", 11999, 11999,
                    [SampleSize(f"SHOHGFW7FVKGBQ{c}", lab.split()[-1], lab != "UK 9", 3) for c, lab in zip("PQRTUV", uk)],
                    image=shoe_image(30, "GEL-NYC"), item_id="itm9ed5f92dc1b32"),
-        SampleItem("tatacliq", "https://www.tatacliq.com/asics-mens-gel-nyc-birch-driftwood-running-shoes/p-mp000000029497697",
+        SampleItem("tatacliq", "https://www.tatacliq.com/asics-mens-gel-nyc-birch-driftwood-running-shoes/p-mp000000029497693",
                    "ASICS Men's GEL-NYC Birch & Driftwood Running Shoes", "ASICS", 11999, 11999,
                    [SampleSize(f"MP0000000294976{90 + i}", f"UK/IND-{lab.split()[-1]}", lab in ("UK 7", "UK 10"), 2)
                     for i, lab in enumerate(uk)],
@@ -328,10 +328,10 @@ def demo_catalog() -> list[SampleItem]:
                    "Puma Men Palermo Lace-Up Sneakers", "PUMA", 7999, 9999,
                    [SampleSize(f"4695839610{i:02d}", lab, lab == "UK 8", 1) for i, lab in enumerate(uk)],
                    image=shoe_image(150, "Palermo"), item_id="469583961_white"),
-        SampleItem("amazon", "https://www.amazon.in/dp/B0CSAMBA09",
+        SampleItem("amazon", "https://www.amazon.in/dp/B0CSAMBA03",
                    "adidas Originals Men's Samba OG Sneakers", "adidas", 10999, 10999,
                    [SampleSize(f"B0CSAMBA0{i}", lab, lab != "UK 9", 5) for i, lab in enumerate(uk)],
-                   image=shoe_image(260, "Samba"), item_id="B0CSAMBA09"),
+                   image=shoe_image(260, "Samba"), item_id="B0CSAMBA03"),
     ]
 
 
