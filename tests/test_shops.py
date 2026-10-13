@@ -477,6 +477,22 @@ async def test_links_from_a_page_are_only_kept_when_safe_to_open():
     assert p.url.startswith("https://www.shop.example/")
 
 
+def test_inline_product_pictures_are_kept_but_scripts_are_not():
+    from tracd.shops.base import safe_image
+
+    assert safe_image("data:image/svg+xml;utf8,<svg/>", "https://a.example/").startswith("data:image/svg+xml")
+    assert safe_image("data:text/html,<script>x</script>", "https://a.example/") is None
+    assert safe_image("//cdn.example/x.jpg", "https://a.example/p") == "https://cdn.example/x.jpg"
+
+
+async def test_demo_products_keep_their_pictures(fetcher, catalog):
+    for item in catalog:
+        from tracd.shops import BY_KEY
+
+        p = await BY_KEY[item.shop].read(fetcher, item.url)
+        assert p.image, item.shop
+
+
 def test_a_stored_link_that_is_not_a_web_link_is_never_opened():
     from tracd.store import Watch
 

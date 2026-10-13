@@ -45,15 +45,20 @@ def safe_link(url: str | None, base: str, hosts: tuple[str, ...]) -> str | None:
 
 
 def safe_image(url: str | None, base: str) -> str | None:
-    """Product pictures come from any CDN, but only over http(s)."""
+    """Product pictures come from any CDN over http(s), or inline as a data: image
+    (shown in an <img>, where it cannot run anything)."""
     if not url or not isinstance(url, str):
         return None
+    url = url.strip()
+    if url.lower().startswith(("data:image/png", "data:image/jpeg", "data:image/webp", "data:image/gif",
+                               "data:image/svg+xml")):
+        return url
     try:
-        full = urljoin(base, url.strip())
-        ok = urlparse(full).scheme in ("http", "https") and urlparse(full).hostname
+        full = urljoin(base, url)
+        u = urlparse(full)
     except ValueError:
         return None
-    return full if ok else None
+    return full if u.scheme in ("http", "https") and u.hostname else None
 
 
 def query(url: str, key: str) -> str | None:

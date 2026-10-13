@@ -19,7 +19,7 @@
         <span><b>Tracd</b></span>
       </a>
       <div id="pulse" class="pulse-chip" aria-live="polite"></div>
-      <button id="open-settings" class="btn ghost" type="button">
+      <button id="open-settings" class="btn ghost" type="button" aria-label="Phone alerts">
         <svg class="i"><use href="#i-bell"/></svg><span>Phone alerts</span><i id="settings-dot" class="dot" hidden></i>
       </button>
     </div>
@@ -67,13 +67,13 @@
 
   <div id="sheet" class="sheet" hidden>
     <div class="sheet-backdrop" data-close></div>
-    <aside class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
       <div class="sheet-head">
         <h2 id="sheet-title">Phone alerts</h2>
         <button class="btn icon ghost" type="button" data-close aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button>
       </div>
       <div id="sheet-body" class="sheet-body"></div>
-    </aside>
+    </div>
   </div>
 
   <div id="modal" class="modal" hidden></div>

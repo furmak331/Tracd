@@ -88,7 +88,7 @@ class Notifier:
         if a.url:
             payload["click"] = a.url
             payload["actions"] = [{"action": "view", "label": a.button, "url": a.url, "clear": True}]
-        if a.image:
+        if a.image and a.image.startswith(("https://", "http://")):
             payload["icon"] = a.image
         headers = {}
         if s.get("ntfy_token"):

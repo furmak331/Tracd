@@ -53,6 +53,14 @@ async def test_ntfy_urgent_alert_payload(fake_services):
     assert headers["Authorization"] == "Bearer tk_1"
 
 
+async def test_ntfy_skips_inline_pictures_it_cannot_show(fake_services):
+    s = {"ntfy_enabled": True, "ntfy_server": fake_services["url"], "ntfy_topic": "tracd-abc"}
+    n = make(s, fake_services)
+    await n.send(Alert("UK 9 in stock", "Buy now", url="https://fk/p", image="data:image/png;base64,AAAA", urgent=True))
+    await n.close()
+    assert "icon" not in fake_services["ntfy"][0][1]
+
+
 async def test_retries_then_succeeds(fake_services):
     fake_services["fail_ntfy"] = 2
     s = {"ntfy_enabled": True, "ntfy_server": fake_services["url"], "ntfy_topic": "t"}
