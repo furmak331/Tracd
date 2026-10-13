@@ -8,7 +8,9 @@ import json
 import logging
 import os
 import secrets
+import shutil
 import socket
+import sqlite3
 import subprocess
 import sys
 import time
@@ -38,13 +40,30 @@ def data_dir(override: str | None = None) -> Path:
 
 
 def _adopt_old_home(old: Path, home: Path) -> None:
-    """Tracd used to be called TrackYourFavs: keep the watches and settings."""
+    """Tracd used to be called TrackYourFavs: keep the watches and settings.
+
+    Safe to repeat: if anything is in use (the old app still running) it is left
+    where it is and tried again next start, and the database's write-ahead log is
+    merged in before the file is renamed so no recent change is lost."""
     try:
-        if old.is_dir() and not home.exists():
-            old.rename(home)
-        if (home / "trackyourfavs.db").exists() and not (home / "tracd.db").exists():
-            (home / "trackyourfavs.db").rename(home / "tracd.db")
-    except OSError:
+        if old.is_dir() and not (home / "tracd.db").exists():
+            if not home.exists():
+                old.rename(home)
+            else:
+                for f in old.iterdir():
+                    if not (home / f.name).exists():
+                        shutil.move(str(f), str(home / f.name))
+        db = home / "trackyourfavs.db"
+        if db.exists() and not (home / "tracd.db").exists():
+            con = sqlite3.connect(db, timeout=1)
+            try:
+                con.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+            finally:
+                con.close()
+            db.rename(home / "tracd.db")
+            for side in ("-wal", "-shm"):
+                (home / f"trackyourfavs.db{side}").unlink(missing_ok=True)
+    except (OSError, sqlite3.Error):
         pass
 
 
@@ -96,6 +115,10 @@ def already_running(port: int) -> bool:
 
 def port_free(host: str, port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        if sys.platform != "win32":
+            # The server binds the same way, so a port left in TIME_WAIT by the
+            # last run counts as free (on Windows this option would mean "share").
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             s.bind((host, port))
             return True
@@ -132,9 +155,12 @@ async def serve(opts: argparse.Namespace) -> int:
         beeper=(lambda: None) if opts.demo else beep,
     )
     host = "0.0.0.0" if opts.lan else "127.0.0.1"
-    lan_key = secrets.token_urlsafe(12) if opts.lan else None
+    lan_key = None
+    if opts.lan:
+        lan_key = store.settings().get("lan_key") or secrets.token_urlsafe(12)
+        store.update_settings(lan_key=lan_key)
     app = create_app(store, engine, fetcher, demo=opts.demo, lan_key=lan_key)
-    runner = web.AppRunner(app, access_log=None)
+    runner = web.AppRunner(app, access_log=None, shutdown_timeout=3)
     await runner.setup()
     site = web.TCPSite(runner, host, opts.port)
     await site.start()
