@@ -251,3 +251,22 @@ def test_lan_key_survives_a_restart(tmp_path):
     s.update_settings(lan_key="abc123")
     s.close()
     assert Store(tmp_path / "tracd.db").settings()["lan_key"] == "abc123"
+
+
+async def test_a_dashboard_that_falls_behind_is_told_to_reload(client, engine):
+    r = await client.get("/api/stream")
+    assert (await asyncio.wait_for(r.content.readline(), 2)).startswith(b"event: hello")
+    await r.content.readline()
+    q = next(iter(engine.listeners))
+    for i in range(q.maxsize + 50):  # far more than it can hold, all at once
+        engine.publish({"type": "log", "log": {"msg": str(i)}})
+    assert q in engine.overflowed
+    lines = []
+    for _ in range(2000):
+        line = await asyncio.wait_for(r.content.readline(), 3)
+        lines.append(line)
+        if line.startswith(b"event: hello"):
+            break
+    assert lines[-1].startswith(b"event: hello")
+    assert q not in engine.overflowed
+    r.close()

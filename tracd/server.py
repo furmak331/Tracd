@@ -289,6 +289,13 @@ class Api:
         try:
             await resp.write(b"event: hello\ndata: {}\n\n")
             while True:
+                if q in self.engine.overflowed:
+                    # This dashboard fell behind (a sleeping laptop, a frozen tab):
+                    # drop the backlog and have it reload everything instead.
+                    while not q.empty():
+                        q.get_nowait()
+                    self.engine.overflowed.discard(q)
+                    await resp.write(b"event: hello\ndata: {}\n\n")
                 try:
                     ev = await asyncio.wait_for(q.get(), timeout=15)
                     await resp.write(("data: " + json.dumps(ev, ensure_ascii=False) + "\n\n").encode())

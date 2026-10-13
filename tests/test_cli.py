@@ -141,3 +141,16 @@ def test_windows_autostart_quotes_paths_with_spaces(monkeypatch, tmp_path):
     monkeypatch.setenv("TRACD_HOME", str(home))
     _, body = cli._startup_target(None)
     assert f'--home ""{home.resolve()}""' in body
+
+
+def test_two_copies_cannot_share_one_data_folder(tmp_path):
+    import subprocess
+
+    first = cli.hold_home(tmp_path)
+    assert first is not None
+    # Another process (as a second copy of Tracd would be) is refused.
+    code = ("import sys; from pathlib import Path; from tracd import cli; "
+            "sys.exit(0 if cli.hold_home(Path(sys.argv[1])) is None else 1)")
+    assert subprocess.run([sys.executable, "-c", code, str(tmp_path)]).returncode == 0
+    first.close()
+    assert subprocess.run([sys.executable, "-c", code, str(tmp_path)]).returncode == 1

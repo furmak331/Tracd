@@ -81,6 +81,7 @@ class Engine:
         self.rt: dict[int, Runtime] = {}
         self.logs: deque[dict] = deque(maxlen=300)
         self.listeners: set[asyncio.Queue] = set()
+        self.overflowed: set[asyncio.Queue] = set()  # listeners that fell behind and must reload
         self.alert_problem: str | None = None
         self._busy: set[tuple[str, str]] = set()
         self._sems: dict[str, asyncio.Semaphore] = {}
@@ -102,7 +103,7 @@ class Engine:
             try:
                 q.put_nowait(event)
             except asyncio.QueueFull:
-                pass
+                self.overflowed.add(q)
 
     def subscribe(self) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue(maxsize=500)
@@ -111,6 +112,7 @@ class Engine:
 
     def unsubscribe(self, q: asyncio.Queue) -> None:
         self.listeners.discard(q)
+        self.overflowed.discard(q)
 
     def wake(self) -> None:
         self._wake.set()

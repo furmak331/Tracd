@@ -202,6 +202,27 @@ async def _warm(fetcher) -> None:
         log.warning(str(e))
 
 
+def hold_home(home: Path):
+    """Lock the data folder for as long as Tracd runs, so two copies (say on two
+    ports) never watch, and alert, twice. Returns None if another copy has it."""
+    home.mkdir(parents=True, exist_ok=True)
+    f = open(home / "tracd.lock", "a+")  # noqa: SIM115 - kept open while running
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+
+            f.seek(0)
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        f.close()
+        return None
+    return f
+
+
 def cmd_run(opts: argparse.Namespace) -> int:
     setup_logging(data_dir(opts.home), quiet=opts.quiet)
     if not port_free("127.0.0.1", opts.port):
@@ -211,6 +232,11 @@ def cmd_run(opts: argparse.Namespace) -> int:
                 webbrowser.open(f"http://127.0.0.1:{opts.port}/")
             return 0
         print(f"Port {opts.port} is busy. Start with --port {opts.port + 1}")
+        return 1
+    lock = None if opts.demo else hold_home(data_dir(opts.home))
+    if lock is None and not opts.demo:
+        print("Tracd is already running with this data folder (maybe on another port). Close it first, "
+              "or use --home for a separate set of watches.")
         return 1
     try:
         return asyncio.run(serve(opts))
