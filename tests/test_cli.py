@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 
 from tracd import cli
 
@@ -37,15 +38,23 @@ def test_windows_autostart_script(monkeypatch, tmp_path):
 
 
 def _old_db(path):
+    """An old database whose last change is still only in its -wal file, as
+    after the app was killed."""
+    import shutil
     import sqlite3
 
-    con = sqlite3.connect(path)
+    src = path.parent / "_src"
+    src.mkdir()
+    con = sqlite3.connect(src / path.name)
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA wal_autocheckpoint=0")
     con.execute("CREATE TABLE w (x)")
     con.execute("INSERT INTO w VALUES ('kept')")
     con.commit()
-    return con  # left open, so the last change is still only in the -wal file
+    for suffix in ("", "-wal"):
+        shutil.copy(src / (path.name + suffix), path.parent / (path.name + suffix))
+    con.close()
+    shutil.rmtree(src)
 
 
 def _rows(path):
@@ -63,10 +72,9 @@ def test_data_from_the_old_name_is_kept(monkeypatch, tmp_path):
     monkeypatch.setattr(cli.sys, "platform", "linux")
     monkeypatch.setattr(cli.Path, "home", lambda: tmp_path)
     (tmp_path / ".trackyourfavs").mkdir()
-    con = _old_db(tmp_path / ".trackyourfavs" / "trackyourfavs.db")
+    _old_db(tmp_path / ".trackyourfavs" / "trackyourfavs.db")
     assert (tmp_path / ".trackyourfavs" / "trackyourfavs.db-wal").stat().st_size > 0
     home = cli.data_dir()
-    con.close()
     assert home == tmp_path / ".tracd"
     assert _rows(home / "tracd.db") == ["kept"] and not (tmp_path / ".trackyourfavs").exists()
 
@@ -76,7 +84,7 @@ def test_old_data_is_adopted_even_if_the_new_folder_was_already_made(monkeypatch
     monkeypatch.setattr(cli.sys, "platform", "linux")
     monkeypatch.setattr(cli.Path, "home", lambda: tmp_path)
     (tmp_path / ".trackyourfavs").mkdir()
-    _old_db(tmp_path / ".trackyourfavs" / "trackyourfavs.db").close()
+    _old_db(tmp_path / ".trackyourfavs" / "trackyourfavs.db")
     (tmp_path / ".tracd").mkdir()
     (tmp_path / ".tracd" / "tracd.log").write_text("log")
     home = cli.data_dir()
@@ -118,7 +126,7 @@ def test_autostart_keeps_the_data_folder_and_port(monkeypatch, tmp_path):
     exec_line = next(x for x in body.splitlines() if x.startswith("Exec="))
     import shlex
 
-    assert shlex.split(exec_line[5:]) == ["/opt/my apps/python3", "-m", "tracd", "--no-open", "--quiet",
+    assert shlex.split(exec_line[5:]) == [str(Path("/opt/my apps/python3")), "-m", "tracd", "--no-open", "--quiet",
                                           "--home", str(home.resolve()), "--port", "9000"]
 
 
