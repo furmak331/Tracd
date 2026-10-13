@@ -46,6 +46,7 @@ class Runtime:
     unknown_streak: int = 0
     unknown_since: float | None = None
     blind_alerted: bool = False
+    seeded: bool = False  # picked up the last state saved before a restart
 
 
 def rupees(v: float | None) -> str:
@@ -65,6 +66,7 @@ class Engine:
         opener: Callable[[str], Any] = webbrowser.open,
         beeper: Callable[[], None] = beep,
         load_timeout: float = 60.0,
+        confirm_after: float | None = 3.0,
     ):
         self.store = store
         self.fetcher = fetcher
@@ -75,6 +77,7 @@ class Engine:
         self.opener = opener
         self.beeper = beeper
         self.load_timeout = load_timeout
+        self.confirm_after = confirm_after
         self.rt: dict[int, Runtime] = {}
         self.logs: deque[dict] = deque(maxlen=300)
         self.listeners: set[asyncio.Queue] = set()
@@ -115,6 +118,17 @@ class Engine:
     def _rt(self, watch_id: int) -> Runtime:
         return self.rt.setdefault(watch_id, Runtime())
 
+    def _seed(self, w: Watch) -> Runtime:
+        """After a restart, carry on from the last saved answer: a size that was
+        already in stock (and maybe already dealt with) is not a new restock."""
+        rt = self._rt(w.id)
+        if not rt.seeded:
+            rt.seeded = True
+            if rt.state is None and w.state in (Stock.IN_STOCK.value, Stock.OUT.value):
+                rt.state = Stock(w.state)
+                rt.acked = rt.state == Stock.IN_STOCK and w.acked_at is not None
+        return rt
+
     def _spawn(self, coro) -> asyncio.Task:
         t = asyncio.create_task(coro)
         self._tasks.add(t)
@@ -140,24 +154,34 @@ class Engine:
     async def run(self) -> None:
         self._running = True
         while self._running:
-            now = self.clock()
-            groups: dict[tuple[str, str], list[Watch]] = defaultdict(list)
-            for w in self.store.watches(enabled_only=True):
-                groups[(w.shop, w.poll_url)].append(w)
-            soonest = now + 1.0
-            for key, ws in groups.items():
-                if key in self._busy:
-                    continue
-                due = min(self._rt(w.id).next_due for w in ws)
-                if due <= now:
-                    self._start_poll(key, ws)
-                else:
-                    soonest = min(soonest, due)
             try:
-                await asyncio.wait_for(self._wake.wait(), timeout=max(0.02, soonest - self.clock()))
-            except asyncio.TimeoutError:
-                pass
-            self._wake.clear()
+                await self._tick()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # noqa: BLE001 - keep checking whatever happens
+                log.exception("checker loop error")
+                self.log(f"Checker hit a problem and carried on: {e.__class__.__name__}: {e}"[:200], "warn")
+                await asyncio.sleep(1)
+
+    async def _tick(self) -> None:
+        now = self.clock()
+        groups: dict[tuple[str, str], list[Watch]] = defaultdict(list)
+        for w in self.store.watches(enabled_only=True):
+            groups[(w.shop, w.poll_url)].append(w)
+        soonest = now + 1.0
+        for key, ws in groups.items():
+            if key in self._busy:
+                continue
+            due = min(self._rt(w.id).next_due for w in ws)
+            if due <= now:
+                self._start_poll(key, ws)
+            else:
+                soonest = min(soonest, due)
+        try:
+            await asyncio.wait_for(self._wake.wait(), timeout=max(0.02, soonest - self.clock()))
+        except asyncio.TimeoutError:
+            pass
+        self._wake.clear()
 
     async def stop(self) -> None:
         self._running = False
@@ -194,24 +218,39 @@ class Engine:
         t0 = self.clock()
         try:
             async with self._sem(host_of(url)):
-                try:
-                    product = await asyncio.wait_for(shop.read(self.fetcher, url), timeout=self.load_timeout)
-                    readings = {w.id: shop.reading(product, w.size_id, w.size_label) for w in ws}
-                except ShopError as e:
-                    readings = {w.id: Reading(e.state, e.detail) for w in ws}
-                except asyncio.TimeoutError:
-                    readings = {w.id: Reading(Stock.UNKNOWN, "the shop took too long to answer") for w in ws}
-                except Exception as e:  # noqa: BLE001 - a bug in a reader must not stop the tracker
-                    detail = f"{e.__class__.__name__}: {e}"[:200]
-                    readings = {w.id: Reading(Stock.UNKNOWN, detail) for w in ws}
+                readings = await self._read(shop, url, ws)
+                if self.confirm_after is not None and any(
+                    readings[w.id].state == Stock.IN_STOCK and self._seed(w).state != Stock.IN_STOCK for w in ws
+                ):
+                    # A restock: one stray page must not set off a round of alerts,
+                    # so look again and go by the second answer.
+                    await asyncio.sleep(self.confirm_after)
+                    readings = await self._read(shop, url, ws)
             ms = int((self.clock() - t0) * 1000)
             self._busy.discard(key)
             for w in ws:
-                await self._handle(w.id, readings[w.id], ms)
+                try:
+                    await self._handle(w.id, readings[w.id], ms)
+                except Exception as e:  # noqa: BLE001 - one bad update must not make it re-check in a loop
+                    log.exception("handling a reading failed")
+                    self._rt(w.id).next_due = self._next(w.interval)
+                    self.log(f"Could not save the check for {w.size_label}: {e.__class__.__name__}: {e}"[:200], "warn", w.id)
         finally:
             self._busy.discard(key)
             done.set()
             self.wake()
+
+    async def _read(self, shop, url: str, ws: list[Watch]) -> dict[int, Reading]:
+        try:
+            product = await asyncio.wait_for(shop.read(self.fetcher, url), timeout=self.load_timeout)
+            return {w.id: shop.reading(product, w.size_id, w.size_label) for w in ws}
+        except ShopError as e:
+            return {w.id: Reading(e.state, e.detail) for w in ws}
+        except asyncio.TimeoutError:
+            return {w.id: Reading(Stock.UNKNOWN, "the shop took too long to answer") for w in ws}
+        except Exception as e:  # noqa: BLE001 - a bug in a reader must not stop the tracker
+            detail = f"{e.__class__.__name__}: {e}"[:200]
+            return {w.id: Reading(Stock.UNKNOWN, detail) for w in ws}
 
     # -- deciding ---------------------------------------------------------------------
 
@@ -225,6 +264,7 @@ class Engine:
             return
         s = self.store.settings()
         rt = self._rt(w.id)
+        self._seed(w)
         now, t = self.clock(), self.wall()
         shop = BY_KEY.get(w.shop, GENERIC)
         upd: dict[str, Any] = {
@@ -244,6 +284,7 @@ class Engine:
             if rt.state != Stock.IN_STOCK:
                 rt.state, rt.alerts_sent, rt.next_alert_at, rt.acked = Stock.IN_STOCK, 0, 0.0, False
                 upd["last_change"] = upd["last_in_stock"] = t
+                upd["acked_at"] = None
                 self.log(f"{w.size_label} IN STOCK on {shop.name}" + (f" at {rupees(r.price)}" if r.price else "")
                          + f": {_short(w.title)}", "hit", w.id)
                 if s.get("beep"):
@@ -291,7 +332,8 @@ class Engine:
                 self._spawn(_quiet(refresh(w.poll_url)))
             base = 30 if r.state == Stock.BLOCKED else w.interval
             cap = 300 if r.state == Stock.BLOCKED else 120
-            rt.next_due = self.clock() + min(cap, base * 2 ** min(rt.unknown_streak - 1, 5))
+            # Back off, but never check more often than the user asked for.
+            rt.next_due = self.clock() + max(w.interval, min(cap, base * 2 ** min(rt.unknown_streak - 1, 5)))
             if not rt.blind_alerted and now - rt.unknown_since >= float(s.get("blind_after") or 180):
                 rt.blind_alerted = True
                 why = ("it is showing a verification page. Open the dashboard and tap 'Open shop window' to clear it"
@@ -323,7 +365,7 @@ class Engine:
     def ack(self, watch_id: int) -> None:
         rt = self._rt(watch_id)
         rt.acked = True
-        w = self.store.watch(watch_id)
+        w = self.store.update_watch(watch_id, acked_at=self.wall())
         if w:
             rt.next_due = self._next(w.interval)
             self.publish({"type": "watch", "watch": self.watch_view(w)})

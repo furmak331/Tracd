@@ -1,4 +1,5 @@
 import asyncio
+import sqlite3
 import time
 
 from conftest import FakeNotifier, settle
@@ -139,9 +140,11 @@ async def test_two_sizes_of_one_item_share_one_request(engine, store, fetcher):
     a = add_myntra(store, "80003", "UK 9")
     b = add_myntra(store, "80002", "UK 8")
     await engine.check_now(a.id)
-    assert len(fetcher.calls) == 1
+    assert len(fetcher.calls) == 2  # one page for both sizes, read twice to confirm UK 8's restock
     assert store.watch(a.id).state == "OUT"
     assert store.watch(b.id).state == "IN_STOCK"
+    await engine.check_now(b.id)
+    assert len(fetcher.calls) == 3
 
 
 async def test_removed_size_is_unknown(engine, store):
@@ -215,3 +218,83 @@ async def test_last_update_after_a_check_is_not_marked_checking(engine, store):
             views.append(ev["watch"])
     assert views[0]["checking"] is True
     assert views[-1]["checking"] is False and views[-1]["state"] == "OUT"
+
+
+async def test_a_single_stray_in_stock_page_does_not_alert(engine, store, catalog, notifier):
+    w = add_flipkart(store)
+    await engine.check_now(w.id)
+    real = engine.fetcher.fetch
+    flips = iter([True, False])
+
+    async def stray(url, **kw):
+        catalog[0].size(UK9).available = next(flips, False)
+        return await real(url, **kw)
+
+    engine.fetcher.fetch = stray
+    w = await engine.check_now(w.id)
+    await settle(engine)
+    assert w.state == "OUT" and notifier.urgent == [] and engine.beeps == []
+
+
+async def test_restart_does_not_re_alert_a_size_already_dealt_with(store, fetcher, catalog, clock):
+    catalog[0].size(UK9).available = True
+    n1 = FakeNotifier()
+    e1 = Engine(store, fetcher, n1, clock=clock, jitter=0, opener=lambda u: None, beeper=lambda: None, confirm_after=0)
+    w = add_flipkart(store)
+    await e1.check_now(w.id)
+    await settle(e1)
+    assert len(n1.urgent) == 1
+    e1.ack(w.id)
+
+    # The app restarts while the size is still in stock: no new round of alerts.
+    n2 = FakeNotifier()
+    e2 = Engine(store, fetcher, n2, clock=clock, jitter=0, opener=lambda u: None, beeper=lambda: None, confirm_after=0)
+    await e2.check_now(w.id)
+    await settle(e2)
+    assert n2.urgent == []
+    assert e2.watch_view(store.watch(w.id))["acked"] is True
+
+    # It sells out and comes back: that is a new restock and alerts again.
+    catalog[0].size(UK9).available = False
+    await e2.check_now(w.id)
+    catalog[0].size(UK9).available = True
+    await e2.check_now(w.id)
+    await settle(e2)
+    assert len(n2.urgent) == 1 and store.watch(w.id).acked_at is None
+
+
+async def test_restart_keeps_reminding_about_a_restock_not_yet_seen(store, fetcher, catalog, clock):
+    catalog[0].size(UK9).available = True
+    e1 = Engine(store, fetcher, FakeNotifier(), clock=clock, jitter=0, opener=lambda u: None, beeper=lambda: None,
+                confirm_after=0)
+    w = add_flipkart(store)
+    await e1.check_now(w.id)
+    await settle(e1)
+    n2 = FakeNotifier()
+    e2 = Engine(store, fetcher, n2, clock=clock, jitter=0, opener=lambda u: None, beeper=lambda: None, confirm_after=0)
+    await e2.check_now(w.id)
+    await settle(e2)
+    assert len(n2.urgent) == 1
+
+
+async def test_backing_off_never_checks_faster_than_asked(engine, store, fetcher, clock):
+    w = add_flipkart(store, interval=600)
+    fetcher.block.add("www.flipkart.com")
+    for _ in range(3):
+        await engine.check_now(w.id)
+        assert engine.rt[w.id].next_due - clock() >= 600
+
+
+async def test_a_failure_saving_a_check_does_not_make_it_recheck_in_a_loop(engine, store, monkeypatch, clock):
+    w = add_flipkart(store)
+    real = store.update_watch
+
+    def broken(wid, **kw):
+        if "checks" in kw:
+            raise sqlite3.OperationalError("disk I/O error")
+        return real(wid, **kw)
+
+    monkeypatch.setattr(store, "update_watch", broken)
+    await engine.check_now(w.id)
+    assert engine.rt[w.id].next_due - clock() >= w.interval * 0.5
+    assert any("Could not save" in x["msg"] for x in engine.logs)

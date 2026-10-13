@@ -28,7 +28,11 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "default_interval": 15,
     "onboarded": False,
     "alerts_verified": False,  # a test alert has gone through at least once
+    "lan_key": "",  # the key for phones on your Wi-Fi (--lan), kept so saved links keep working
 }
+
+# Never sent to the dashboard and never changed from it.
+INTERNAL_SETTINGS = ("lan_key",)
 
 SECRET_SETTINGS = ("telegram_token", "ntfy_token")
 
@@ -57,6 +61,7 @@ class Watch:
     last_in_stock: float | None = None
     checks: int = 0
     last_ms: int | None = None
+    acked_at: float | None = None  # when "Got it" was tapped for the current restock
 
     @property
     def open_url(self) -> str:
@@ -96,7 +101,8 @@ CREATE TABLE IF NOT EXISTS watches (
     last_change REAL,
     last_in_stock REAL,
     checks INTEGER NOT NULL DEFAULT 0,
-    last_ms INTEGER
+    last_ms INTEGER,
+    acked_at REAL
 );
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -110,6 +116,10 @@ CREATE INDEX IF NOT EXISTS events_watch ON events (watch_id, at);
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
 
+# Columns added after the first release, with their SQL type. Older databases
+# get them on start.
+ADDED_COLUMNS = {"acked_at": "REAL"}
+
 
 class Store:
     def __init__(self, path: Path | str):
@@ -122,6 +132,10 @@ class Store:
         with self._lock:
             self._db.execute("PRAGMA journal_mode=WAL") if self.path != ":memory:" else None
             self._db.executescript(SCHEMA)
+            have = {r[1] for r in self._db.execute("PRAGMA table_info(watches)")}
+            for col, typ in ADDED_COLUMNS.items():
+                if col not in have:
+                    self._db.execute(f"ALTER TABLE watches ADD COLUMN {col} {typ}")
         self._settings_cache: dict[str, Any] | None = None
 
     def close(self) -> None:
@@ -221,7 +235,10 @@ class Store:
             if isinstance(default, bool):
                 v = bool(v)
             elif isinstance(default, int):
-                v = int(v)
+                try:
+                    v = int(float(v))
+                except (TypeError, ValueError, OverflowError):
+                    continue
             elif isinstance(default, str):
                 v = str(v or "").strip()
             cur[k] = v

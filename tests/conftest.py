@@ -100,7 +100,8 @@ def clock():
 def engine(store, fetcher, notifier, clock):
     opened: list[str] = []
     beeps: list[int] = []
-    e = Engine(store, fetcher, notifier, clock=clock, jitter=0, opener=opened.append, beeper=lambda: beeps.append(1))
+    e = Engine(store, fetcher, notifier, clock=clock, jitter=0, opener=opened.append, beeper=lambda: beeps.append(1),
+               confirm_after=0)
     e.opened = opened  # type: ignore[attr-defined]
     e.beeps = beeps  # type: ignore[attr-defined]
     return e
